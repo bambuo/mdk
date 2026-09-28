@@ -42,4 +42,31 @@ public static class MarketIntervals
     public static readonly string[] All = ["5m", "15m", "30m", "1h", "2h", "4h", "6h", "12h", "1d", "3d", "1w"];
 
     public static bool IsValid(string interval) => Array.IndexOf(All, interval) >= 0;
+
+    /// <summary>周期对应的秒数。</summary>
+    public static long IntervalSeconds(string interval) => interval switch
+    {
+        "5m" => 300,
+        "15m" => 900,
+        "30m" => 1800,
+        "1h" => 3600,
+        "2h" => 7200,
+        "4h" => 14400,
+        "6h" => 21600,
+        "12h" => 43200,
+        "1d" => 86400,
+        "3d" => 259200,
+        "1w" => 604800,
+        _ => 3600,
+    };
+
+    /// <summary>多周期共振用的高一档周期；最高档（1w）返回 null。</summary>
+    public static string? HigherInterval(string interval) => interval switch
+    {
+        "5m" or "15m" or "30m" => "1h",
+        "1h" or "2h" => "4h",
+        "4h" or "6h" or "12h" => "1d",
+        "1d" or "3d" => "1w",
+        _ => null,
+    };
 }

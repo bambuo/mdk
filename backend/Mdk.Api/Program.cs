@@ -8,6 +8,7 @@ using Mdk.Api.Endpoints;
 var builder = WebApplication.CreateBuilder(args);
 
 builder.Services.Configure<BinanceOptions>(builder.Configuration.GetSection(BinanceOptions.SectionName));
+builder.Services.Configure<SignalOptions>(builder.Configuration.GetSection(SignalOptions.SectionName));
 // exchangeInfo（现货约 17MB）必须启用压缩传输并放宽超时，否则会下载超时
 builder.Services.AddHttpClient<BinanceRestClient>(client => client.Timeout = TimeSpan.FromSeconds(60))
     .ConfigurePrimaryHttpMessageHandler(() => new HttpClientHandler
@@ -17,6 +18,9 @@ builder.Services.AddHttpClient<BinanceRestClient>(client => client.Timeout = Tim
 builder.Services.AddSingleton<SymbolCatalog>();
 builder.Services.AddSingleton<KlineStreamService>();
 builder.Services.AddSingleton<AnalysisService>();
+builder.Services.AddSingleton<SignalJournal>();
+builder.Services.AddHostedService<SignalOutcomeService>();
+builder.Services.AddHostedService<WatchlistAnalysisService>();
 
 // 枚举以小写参与 JSON（market: "spot" | "futures"）
 var enumConverter = new JsonStringEnumConverter(JsonNamingPolicy.CamelCase, allowIntegerValues: false);

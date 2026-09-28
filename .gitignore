@@ -15,3 +15,9 @@ dist/
 
 # ZCode 工具产物
 .zcode/
+
+# 信号绩效数据（本地积累）
+data/
+
+# IDE
+.idea/

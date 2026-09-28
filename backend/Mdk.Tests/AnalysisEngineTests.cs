@@ -148,6 +148,180 @@ public static class AnalysisEngineTests
             Assert.All(signals, s => s.StopPrice!.Value > s.Price); // 卖点止损在上方
         });
 
+            t.Case("信号_v2_冷却去重_同源同向6根内不重复", () =>
+        {
+            var candles = FlatCandles(30);
+            double[] ema20 = Enumerable.Repeat(100.0, 30).ToArray();
+            double[] ema50 = Enumerable.Repeat(100.0, 30).ToArray();
+            double[] rsi = Enumerable.Repeat(50.0, 30).ToArray();
+            double[] dif = Enumerable.Repeat(0.0, 30).ToArray();
+            double[] dea = Enumerable.Repeat(0.0, 30).ToArray();
+            double[] atr = Enumerable.Repeat(1.0, 30).ToArray();
+
+            // 快线：0-4=99（下方），5=101 金叉，6=99 死叉，7-8=99，9=101 再次金叉（距上次买点 4 根 < 6 → 应被抑制）
+            for (var i = 0; i <= 4; i++) ema20[i] = 99;
+            ema20[5] = 101;
+            ema20[6] = 99;
+            ema20[7] = 99;
+            ema20[8] = 99;
+            ema20[9] = 101;
+
+            var signals = SignalEngine.Generate(candles, ema20, ema50, rsi, dif, dea, atr);
+
+            var emaSignals = signals.Where(s => s.Source == "EMA").ToList();
+            Assert.Equal(2, emaSignals.Count); // 买@5 + 卖@6；9 处的买点被冷却抑制
+            Assert.Equal("buy", emaSignals[0].Side);
+            Assert.Equal("sell", emaSignals[1].Side);
+            Assert.All(emaSignals, s => Assert.True(s.IsConfirmed));
+        });
+
+        t.Case("信号_v2_最后一根未收盘_只产生盘中预警", () =>
+        {
+            const int n = 30;
+            var candles = new Candle[n];
+            for (var i = 0; i < n; i++)
+                candles[i] = new Candle(1_000_000L + i * 60L, 100, 101, 99, 100, 10);
+            double[] ema20 = Enumerable.Repeat(100.0, n).ToArray();
+            double[] ema50 = Enumerable.Repeat(100.0, n).ToArray();
+            double[] rsi = Enumerable.Repeat(50.0, n).ToArray();
+            double[] dif = Enumerable.Repeat(0.0, n).ToArray();
+            double[] dea = Enumerable.Repeat(0.0, n).ToArray();
+            double[] atr = Enumerable.Repeat(1.0, n).ToArray();
+
+            // 前段都在慢线下方，交叉恰好发生在最后一根（未收盘）K线 → 只能有盘中预警
+            for (var i = 0; i <= 28; i++) ema20[i] = 99;
+            ema20[29] = 101;
+
+            var signals = SignalEngine.Generate(candles, ema20, ema50, rsi, dif, dea, atr);
+
+            var preview = signals.Where(s => !s.IsConfirmed).ToList();
+            var confirmed = signals.Where(s => s.IsConfirmed).ToList();
+            Assert.Equal(1, preview.Count);
+            Assert.Equal("buy", preview[0].Side);
+            Assert.Equal("EMA", preview[0].Source);
+            Assert.Equal(0, confirmed.Count); // 同样的交叉不允许绕过收盘确认
+        });
+
+        t.Case("信号_v2_多周期共振标记_顺大势为true", () =>
+        {
+            // K线时间从 1,000,000 起，保证高周期K线在信号时刻已收盘
+            const int n = 30;
+            var candles = new Candle[n];
+            for (var i = 0; i < n; i++)
+                candles[i] = new Candle(1_000_000L + i * 60L, 100, 101, 99, 100, 10);
+            double[] ema20 = Enumerable.Repeat(100.0, n).ToArray();
+            double[] ema50 = Enumerable.Repeat(100.0, n).ToArray();
+            double[] rsi = Enumerable.Repeat(50.0, n).ToArray();
+            double[] dif = Enumerable.Repeat(0.0, n).ToArray();
+            double[] dea = Enumerable.Repeat(0.0, n).ToArray();
+            double[] atr = Enumerable.Repeat(1.0, n).ToArray();
+
+            rsi[19] = 28; rsi[20] = 28; rsi[21] = 32;        // RSI 买点 @21
+            for (var i = 0; i <= 10; i++) ema20[i] = 101;    // 前段在上方
+            ema20[11] = 99;                                   // EMA 死叉卖点 @11
+
+            // 高周期（4h）单边上涨：买点顺大势 true，卖点逆大势 false
+            var htf = Enumerable.Range(0, 60)
+                .Select(j => new Candle(800_000L + j * 600L, 100 + j, 101 + j, 99 + j, 100.5 + j, 10))
+                .ToArray();
+
+            var signals = SignalEngine.Generate(candles, ema20, ema50, rsi, dif, dea, atr,
+                cooldownBars: 6, htfCandles: htf, htfInterval: "4h");
+
+            Assert.Equal(2, signals.Count);
+            var buy = signals.Single(s => s.Side == "buy");
+            var sell = signals.Single(s => s.Side == "sell");
+            Assert.Equal(true, buy.TrendAligned);
+            Assert.Equal(false, sell.TrendAligned);
+        });
+
+        // ---------- v3：市场状态注入与结构确认信号 ----------
+
+        t.Case("信号_v3_市场状态随信号记录", () =>
+        {
+            var candles = FlatCandles(30);
+            double[] ema20 = Enumerable.Repeat(100.0, 30).ToArray();
+            double[] ema50 = Enumerable.Repeat(100.0, 30).ToArray();
+            double[] rsi = Enumerable.Repeat(50.0, 30).ToArray();
+            double[] dif = Enumerable.Repeat(0.0, 30).ToArray();
+            double[] dea = Enumerable.Repeat(0.0, 30).ToArray();
+            double[] atr = Enumerable.Repeat(1.0, 30).ToArray();
+
+            rsi[19] = 28; rsi[20] = 28; rsi[21] = 32;   // RSI 买点 @21
+
+            var signals = SignalEngine.Generate(candles, ema20, ema50, rsi, dif, dea, atr,
+                cooldownBars: 6,
+                regimeAt: i => new SignalRegime(Adx: 27.5, AtrPct: 0.012, BandwidthPct: 0.045));
+
+            Assert.Equal(1, signals.Count);
+            Assert.Equal(27.5, signals[0].Adx!.Value, 4);
+            Assert.Equal(0.012, signals[0].AtrPct!.Value, 6);
+            Assert.Equal(0.045, signals[0].BandwidthPct!.Value, 6);
+        });
+
+        t.Case("信号_v3_结构确认_触及历史支撑并收回产生买点", () =>
+        {
+            // 构造：前段在 100 附近形成三次摆动低点（确立位点），随后回踩 100 并有效收回
+            const int n = 40;
+            var candles = new Candle[n];
+            var times = Enumerable.Range(0, n).Select(i => 1_000_000L + i * 3600L).ToArray();
+            for (var i = 0; i < n; i++)
+                candles[i] = new Candle(times[i], 105, 106, 104, 105, 10);
+            // 三个摆动低点（历史结构）：i=5 / 15 / 22，低点均为 100（各需左右各 3 根更高）
+            foreach (var idx in new[] { 5, 15, 22 })
+            {
+                candles[idx] = new Candle(times[idx], 104, 105, 100, 103.5, 10);
+                for (var k = 1; k <= 3; k++)
+                {
+                    candles[idx - k] = new Candle(times[idx - k], 103, 104, 101.5, 103, 10);
+                    candles[idx + k] = new Candle(times[idx + k], 103, 104, 101.5, 103, 10);
+                }
+            }
+            // 回踩 100 并有效收回（收阳，收盘高于位点 0.1×ATR 以上）
+            candles[33] = new Candle(times[33], 102.5, 104, 100.2, 103.5, 10);
+
+            double[] atr = Enumerable.Repeat(2.0, n).ToArray();  // 容差 0.5×ATR = 1.0，收回幅度 0.2
+            double[] flat = Enumerable.Repeat(100.0, n).ToArray();
+            double[] zero = Enumerable.Repeat(0.0, n).ToArray();
+
+            var swings = SupportResistance.FindSwings(candles);
+            var signals = SignalEngine.Generate(candles, flat, flat, flat, zero, zero, atr,
+                cooldownBars: 6, htfCandles: null, htfInterval: null, swings: swings);
+
+            var structure = signals.Where(s => s.Source == "结构").ToList();
+            Assert.True(structure.Count >= 1, "应产生结构确认信号");
+            Assert.All(structure, s => Assert.Equal("buy", s.Side));
+            Assert.Contains("结构确认", structure[0].Note);
+        });
+
+        t.Case("信号_v3_结构信号不使用未来数据", () =>
+        {
+            // 同一段K线，末尾追加更多K线不应改变较早时间点上的结构信号（无未来函数）
+            const int n = 60;
+            var candles = new Candle[n];
+            for (var i = 0; i < n; i++)
+            {
+                var mid = 100 + Math.Sin(i / 4.0) * 3;
+                candles[i] = new Candle(1_000_000L + i * 3600L, mid, mid + 1, mid - 1, mid, 10);
+            }
+            double[] atr = Enumerable.Repeat(2.0, n).ToArray();
+            double[] flat = Enumerable.Repeat(100.0, n).ToArray();
+            double[] zero = Enumerable.Repeat(0.0, n).ToArray();
+
+            var full = SignalEngine.Generate(candles, flat, flat, flat, zero, zero, atr,
+                cooldownBars: 6, htfCandles: null, htfInterval: null, swings: SupportResistance.FindSwings(candles));
+            var truncated = SignalEngine.Generate(candles[..(n - 10)], flat[..(n - 10)], flat[..(n - 10)], flat[..(n - 10)],
+                zero[..(n - 10)], zero[..(n - 10)], atr[..(n - 10)],
+                cooldownBars: 6, htfCandles: null, htfInterval: null,
+                swings: SupportResistance.FindSwings(candles[..(n - 10)]));
+
+            var fullEarly = full.Where(s => s.Source == "结构" && s.Time <= candles[n - 11].Time).Select(s => (s.Time, s.Side)).ToList();
+            var truncatedAll = truncated.Where(s => s.Source == "结构").Select(s => (s.Time, s.Side)).ToList();
+            // 截断后（只用历史数据）得到的结构信号应完全覆盖完整数据中"同一时间点"的信号
+            Assert.All(fullEarly, s => Assert.True(truncatedAll.Contains(s),
+                $"截断数据后缺少时间点 {s.Time} 的结构信号（疑似使用了未来数据）"));
+        });
+
         // ---------- 端到端（合成K线） ----------
 
         t.Case("分析引擎_端到端_合成上涨K线", () =>
