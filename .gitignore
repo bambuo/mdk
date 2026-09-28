@@ -1,0 +1,17 @@
+# .NET
+bin/
+obj/
+*.user
+
+# Node / bun
+node_modules/
+dist/
+
+# 本地日志
+*.log
+
+# macOS
+.DS_Store
+
+# ZCode 工具产物
+.zcode/

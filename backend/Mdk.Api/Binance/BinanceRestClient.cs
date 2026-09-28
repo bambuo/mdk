@@ -1,0 +1,213 @@
+using System.Globalization;
+using System.Text.Json;
+using System.Text.Json.Serialization;
+using Mdk.Api.Analysis;
+using Mdk.Api.Domain;
+using Mdk.Api.Models;
+using Microsoft.Extensions.Options;
+
+namespace Mdk.Api.Binance;
+
+public sealed class BinanceOptions
+{
+    public const string SectionName = "Binance";
+
+    /// <summary>现货 REST 基地址，被墙/受限时可换 data-api.binance.vision 等镜像。</summary>
+    public string RestBaseUrl { get; set; } = "https://api.binance.com";
+
+    /// <summary>现货 WebSocket 基地址，备用 data-stream.binance.vision。</summary>
+    public string WsBaseUrl { get; set; } = "wss://stream.binance.com:9443";
+
+    /// <summary>U 本位合约 REST 基地址。</summary>
+    public string FuturesRestBaseUrl { get; set; } = "https://fapi.binance.com";
+
+    /// <summary>U 本位合约 WebSocket 基地址。</summary>
+    public string FuturesWsBaseUrl { get; set; } = "wss://fstream.binance.com";
+}
+
+/// <summary>币安返回的业务错误（HTTP 状态可能仍是 200）。</summary>
+public sealed class BinanceException(int code, string message)
+    : Exception($"币安接口错误 {code}: {message}")
+{
+    public int Code { get; } = code;
+}
+
+public sealed class BinanceRestClient
+{
+    private readonly HttpClient _http;
+    private readonly BinanceOptions _options;
+    private readonly ILogger<BinanceRestClient> _logger;
+    private readonly Lock _sync = new();
+
+    private readonly Dictionary<MarketKind, IReadOnlyList<Ticker24h>> _tickerCache = new();
+    private readonly Dictionary<MarketKind, DateTimeOffset> _tickerCachedAt = new();
+    private readonly Dictionary<MarketKind, IReadOnlyList<SymbolInfo>> _exchangeInfoCache = new();
+    private readonly Dictionary<MarketKind, DateTimeOffset> _exchangeInfoCachedAt = new();
+
+    public BinanceRestClient(HttpClient http, IOptions<BinanceOptions> options, ILogger<BinanceRestClient> logger)
+    {
+        _http = http;
+        _options = options.Value;
+        _logger = logger;
+    }
+
+    private string RestBaseUrl(MarketKind market) =>
+        market == MarketKind.Futures ? _options.FuturesRestBaseUrl : _options.RestBaseUrl;
+
+    /// <summary>拉取K线（币安数组套数组格式 → 归一化 Candle，时间为秒级）。现货与合约响应结构一致。</summary>
+    public async Task<Candle[]> GetKlinesAsync(MarketKind market, TradingPair pair, string interval, int limit, CancellationToken ct = default)
+    {
+        var url = $"{market.ToRestPath()}/klines?symbol={pair.Symbol}&interval={interval}&limit={limit}";
+        using var response = await SendAsync(market, url, ct);
+        var rows = await response.Content.ReadFromJsonAsync<JsonElement[][]>(cancellationToken: ct)
+                   ?? throw new BinanceException(-1, "klines 返回为空");
+        var candles = new Candle[rows.Length];
+        for (var i = 0; i < rows.Length; i++)
+        {
+            var row = rows[i];
+            candles[i] = new Candle(
+                Time: row[0].GetInt64() / 1000,
+                Open: Num(row[1]),
+                High: Num(row[2]),
+                Low: Num(row[3]),
+                Close: Num(row[4]),
+                Volume: Num(row[5]));
+        }
+        return candles;
+    }
+
+    /// <summary>全部交易对 24h 行情（每市场缓存 30 秒，避免多个请求打超频限制）。</summary>
+    public async Task<IReadOnlyList<Ticker24h>> Get24hTickersAsync(MarketKind market, CancellationToken ct = default)
+    {
+        lock (_sync)
+        {
+            if (_tickerCache.TryGetValue(market, out var cached) && DateTimeOffset.UtcNow - _tickerCachedAt[market] < TimeSpan.FromSeconds(30))
+                return cached;
+        }
+        using var response = await SendAsync(market, $"{market.ToRestPath()}/ticker/24hr", ct);
+        var raw = await response.Content.ReadFromJsonAsync<List<TickerRaw>>(cancellationToken: ct) ?? [];
+        var tickers = raw
+            .Select(t => new Ticker24h(t.Symbol, D(t.LastPrice), D(t.PriceChangePercent), D(t.QuoteVolume)))
+            .ToList();
+        lock (_sync)
+        {
+            _tickerCache[market] = tickers;
+            _tickerCachedAt[market] = DateTimeOffset.UtcNow;
+        }
+        return tickers;
+    }
+
+    /// <summary>交易所信息（含交易币/计价币拆分，每市场缓存 1 小时）。</summary>
+    public async Task<IReadOnlyList<SymbolInfo>> GetExchangeInfoAsync(MarketKind market, CancellationToken ct = default)
+    {
+        lock (_sync)
+        {
+            if (_exchangeInfoCache.TryGetValue(market, out var cached) && DateTimeOffset.UtcNow - _exchangeInfoCachedAt[market] < TimeSpan.FromHours(1))
+                return cached;
+        }
+        using var response = await SendAsync(market, $"{market.ToRestPath()}/exchangeInfo", ct);
+        var raw = await response.Content.ReadFromJsonAsync<ExchangeInfoRaw>(cancellationToken: ct)
+                  ?? throw new BinanceException(-1, "exchangeInfo 返回为空");
+        var infos = new List<SymbolInfo>(raw.Symbols.Count);
+        foreach (var s in raw.Symbols)
+        {
+            // 个别符号（如连写无法切分、或币种代码异常）直接跳过，不影响整体目录
+            if (!TradingPair.TryParse(s.Symbol, out var parsedPair)) continue;
+            try
+            {
+                infos.Add(new SymbolInfo(TradingPair.From(s.BaseAsset, s.QuoteAsset), s.Status));
+            }
+            catch (FormatException ex)
+            {
+                _logger.LogWarning(ex, "跳过无法解析的交易对 {Symbol}", s.Symbol);
+            }
+        }
+        lock (_sync)
+        {
+            _exchangeInfoCache[market] = infos;
+            _exchangeInfoCachedAt[market] = DateTimeOffset.UtcNow;
+        }
+        return infos;
+    }
+
+    private async Task<HttpResponseMessage> SendAsync(MarketKind market, string path, CancellationToken ct)
+    {
+        var response = await _http.GetAsync(RestBaseUrl(market).TrimEnd('/') + path, ct);
+        if (response.IsSuccessStatusCode) return response;
+        string message;
+        try
+        {
+            message = await response.Content.ReadAsStringAsync(ct);
+        }
+        catch
+        {
+            message = response.ReasonPhrase ?? "请求失败";
+        }
+        _logger.LogWarning("币安请求失败 {Market} {Status}: {Body}", market, (int)response.StatusCode, message);
+        throw new BinanceException((int)response.StatusCode, message);
+    }
+
+    private static double Num(JsonElement e) => double.Parse(e.GetString()!, CultureInfo.InvariantCulture);
+
+    private static double D(string s) => double.Parse(s, CultureInfo.InvariantCulture);
+
+    private sealed class TickerRaw
+    {
+        [JsonPropertyName("symbol")] public string Symbol { get; set; } = "";
+        [JsonPropertyName("lastPrice")] public string LastPrice { get; set; } = "0";
+        [JsonPropertyName("priceChangePercent")] public string PriceChangePercent { get; set; } = "0";
+        [JsonPropertyName("quoteVolume")] public string QuoteVolume { get; set; } = "0";
+    }
+
+    private sealed class ExchangeInfoRaw
+    {
+        [JsonPropertyName("symbols")] public List<SymbolRaw> Symbols { get; set; } = [];
+    }
+
+    private sealed class SymbolRaw
+    {
+        [JsonPropertyName("symbol")] public string Symbol { get; set; } = "";
+        [JsonPropertyName("baseAsset")] public string BaseAsset { get; set; } = "";
+        [JsonPropertyName("quoteAsset")] public string QuoteAsset { get; set; } = "";
+        [JsonPropertyName("status")] public string Status { get; set; } = "";
+    }
+}
+
+/// <summary>
+/// 交易对目录：以币安 exchangeInfo（TRADING 状态）为准，
+/// 提供「原始字符串 → 权威 TradingPair（交易币/计价币拆分）」的解析与校验。现货与合约各自维护一份。
+/// </summary>
+public sealed class SymbolCatalog(BinanceRestClient rest)
+{
+    private readonly SemaphoreSlim _gate = new(1, 1);
+    private readonly Dictionary<MarketKind, Dictionary<string, TradingPair>> _bySymbol = new();
+
+    /// <summary>指定市场的全部可交易对权威映射（symbol → TradingPair），首次调用时加载并缓存。</summary>
+    public async Task<Dictionary<string, TradingPair>> GetAllAsync(MarketKind market, CancellationToken ct = default)
+    {
+        if (_bySymbol.TryGetValue(market, out var cached)) return cached;
+        await _gate.WaitAsync(ct);
+        try
+        {
+            if (_bySymbol.TryGetValue(market, out var again)) return again;
+            var infos = await rest.GetExchangeInfoAsync(market, ct);
+            var map = infos
+                .Where(s => s.Status == "TRADING")
+                .GroupBy(s => s.Pair.Symbol, StringComparer.Ordinal)
+                .ToDictionary(g => g.Key, g => g.First().Pair, StringComparer.Ordinal);
+            _bySymbol[market] = map;
+            return map;
+        }
+        finally
+        {
+            _gate.Release();
+        }
+    }
+
+    /// <summary>解析并校验交易对；返回以币安 exchangeInfo 为准的权威拆分，该市场下未知交易对返回 null。</summary>
+    public async Task<TradingPair?> ResolveAsync(MarketKind market, string raw, CancellationToken ct = default)
+    {
+        var all = await GetAllAsync(market, ct);
+        return all.GetValueOrDefault(raw.Trim().ToUpperInvariant());
+    }
+}
