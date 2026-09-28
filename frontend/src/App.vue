@@ -1,13 +1,13 @@
 <script setup lang="ts">
 import { Message } from '@arco-design/web-vue'
 import { onMounted, ref, watch } from 'vue'
-import { fetchAnalysis, fetchKlines, fetchSymbols } from './api/client'
+import { fetchAnalysis, fetchKlines, fetchSignalStats, fetchSymbols } from './api/client'
 import { useKlineSocket } from './composables/useKlineSocket'
 import AnalysisPanel from './components/AnalysisPanel.vue'
 import ChartPanel from './components/ChartPanel.vue'
 import TopToolbar from './components/TopToolbar.vue'
 import { isPeggedPair } from './utils'
-import type { AnalysisResult, Candle, MarketKind, SymbolQuote, Toggles } from './types'
+import type { AnalysisResult, Candle, MarketKind, SignalStatsResponse, SymbolQuote, Toggles } from './types'
 
 const symbols = ref<SymbolQuote[]>([])
 const market = ref<MarketKind>('spot')
@@ -29,6 +29,8 @@ const analysis = ref<AnalysisResult | null>(null)
 const livePrice = ref<number | null>(null)
 // 最近一次收到实时推送的时间（用于展示"实时"新鲜度）
 const lastPushAt = ref<number | null>(null)
+// 信号历史绩效（按当前 市场/币种/周期 查询）
+const signalStats = ref<SignalStatsResponse | null>(null)
 const loading = ref(false)
 const errorMsg = ref('')
 const chartRef = ref<InstanceType<typeof ChartPanel> | null>(null)
@@ -88,6 +90,19 @@ async function reload() {
   }
 }
 
+async function loadSignalStats() {
+  const requestedMarket = market.value
+  const requestedSymbol = symbol.value
+  const requestedInterval = interval.value
+  try {
+    const stats = await fetchSignalStats(requestedMarket, requestedSymbol, requestedInterval)
+    if (market.value !== requestedMarket || symbol.value !== requestedSymbol || interval.value !== requestedInterval) return
+    signalStats.value = stats
+  } catch {
+    // 统计接口失败不影响主功能
+  }
+}
+
 const { status } = useKlineSocket(market, symbol, interval, {
   onKline: candle => {
     // 先更新价格徽标：即使图表更新异常，观感上的实时性也不受影响
@@ -115,6 +130,7 @@ function onStale() {
 onMounted(async () => {
   await loadSymbols()
   await reload()
+  await loadSignalStats()
 })
 
 // 仅市场变化时重新拉交易对目录（切周期/切币种不必重拉）
@@ -122,11 +138,13 @@ watch(market, async () => {
   const previous = symbol.value
   await loadSymbols()
   if (symbol.value === previous) await reload()
+  await loadSignalStats()
   // 若目录校验后改了 symbol，由下面的 [symbol, interval] 监听触发加载
 })
 
 watch([symbol, interval], () => {
   reload()
+  loadSignalStats()
 })
 </script>
 
@@ -169,7 +187,7 @@ watch([symbol, interval], () => {
         </div>
       </main>
       <aside class="panel">
-        <AnalysisPanel :analysis="analysis" @locate="onLocate" />
+        <AnalysisPanel :analysis="analysis" :stats="signalStats" @locate="onLocate" />
       </aside>
     </div>
   </div>

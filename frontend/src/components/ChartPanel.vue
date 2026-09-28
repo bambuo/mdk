@@ -55,6 +55,9 @@ let ema200Series: ISeriesApi<'Line'> | null = null
 let bollUpperSeries: ISeriesApi<'Line'> | null = null
 let bollMiddleSeries: ISeriesApi<'Line'> | null = null
 let bollLowerSeries: ISeriesApi<'Line'> | null = null
+// 信号用快慢线（1h 提速参数 10/30 时后端下发，虚线展示，与显示用 EMA20/50 区分）
+let emaSigFastSeries: ISeriesApi<'Line'> | null = null
+let emaSigSlowSeries: ISeriesApi<'Line'> | null = null
 let rsiSeries: ISeriesApi<'Line'> | null = null
 let macdHistSeries: ISeriesApi<'Histogram'> | null = null
 let difSeries: ISeriesApi<'Line'> | null = null
@@ -100,7 +103,7 @@ function applyPriceFormat() {
   const p = pricePrecision(last.close)
   const fmt = { type: 'price' as const, precision: p, minMove: 1 / 10 ** p }
   candleSeries.applyOptions({ priceFormat: fmt })
-  for (const s of [ema20Series, ema50Series, ema200Series, bollUpperSeries, bollMiddleSeries, bollLowerSeries])
+  for (const s of [ema20Series, ema50Series, ema200Series, emaSigFastSeries, emaSigSlowSeries, bollUpperSeries, bollMiddleSeries, bollLowerSeries])
     s?.applyOptions({ priceFormat: fmt })
 }
 
@@ -113,6 +116,8 @@ function applyOverlayLines() {
   bollUpperSeries?.setData(toLineData(a.series['bollUpper']))
   bollMiddleSeries?.setData(toLineData(a.series['bollMiddle']))
   bollLowerSeries?.setData(toLineData(a.series['bollLower']))
+  emaSigFastSeries?.setData(toLineData(a.series['emaSigFast']))
+  emaSigSlowSeries?.setData(toLineData(a.series['emaSigSlow']))
   rsiSeries?.setData(toLineData(a.series['rsi14']))
   macdHistSeries?.setData(
     toLineData(a.macd.hist).map(d => ({
@@ -176,6 +181,8 @@ function applyVisibility() {
   bollUpperSeries?.applyOptions({ visible: props.toggles.boll })
   bollMiddleSeries?.applyOptions({ visible: props.toggles.boll })
   bollLowerSeries?.applyOptions({ visible: props.toggles.boll })
+  emaSigFastSeries?.applyOptions({ visible: props.toggles.ema })
+  emaSigSlowSeries?.applyOptions({ visible: props.toggles.ema })
   rsiSeries?.applyOptions({ visible: props.toggles.rsi })
   macdHistSeries?.applyOptions({ visible: props.toggles.macd })
   difSeries?.applyOptions({ visible: props.toggles.macd })
@@ -259,6 +266,13 @@ onMounted(() => {
   bollUpperSeries = chart.addSeries(LineSeries, lineOptions(COLORS.boll))
   bollMiddleSeries = chart.addSeries(LineSeries, lineOptions(COLORS.bollMid))
   bollLowerSeries = chart.addSeries(LineSeries, lineOptions(COLORS.boll))
+
+  const sigLine = (color: string) => ({
+    ...lineOptions(color),
+    lineStyle: LineStyle.Dashed,
+  })
+  emaSigFastSeries = chart.addSeries(LineSeries, sigLine('rgba(240,185,11,0.55)'))
+  emaSigSlowSeries = chart.addSeries(LineSeries, sigLine('rgba(91,141,239,0.55)'))
 
   rsiSeries = chart.addSeries(
     LineSeries,

@@ -1,4 +1,4 @@
-import type { AnalysisResult, KlinesResponse, MarketKind, SymbolQuote } from '../types'
+import type { AnalysisResult, KlinesResponse, MarketKind, SignalStatsResponse, SymbolQuote } from '../types'
 
 async function getJson<T>(url: string): Promise<T> {
   const resp = await fetch(url)
@@ -21,4 +21,9 @@ export function fetchKlines(market: MarketKind, symbol: string, interval: string
 
 export function fetchAnalysis(market: MarketKind, symbol: string, interval: string, limit = 500): Promise<AnalysisResult> {
   return getJson<AnalysisResult>(`/api/analysis?market=${market}&symbol=${encodeURIComponent(symbol)}&interval=${interval}&limit=${limit}`)
+}
+
+/** 信号历史绩效（事后评估；days 缺省 90） */
+export function fetchSignalStats(market: MarketKind, symbol: string, interval: string, days = 90): Promise<SignalStatsResponse> {
+  return getJson<SignalStatsResponse>(`/api/signal-stats?market=${market}&symbol=${encodeURIComponent(symbol)}&interval=${interval}&days=${days}`)
 }
