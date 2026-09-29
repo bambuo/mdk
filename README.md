@@ -88,6 +88,10 @@ frontend/
 
 ## 校验
 
+前端静态检查：`cd frontend && bun run build`（= `vue-tsc --noEmit` + 构建）。vue-tsc 需要 `node` 在 PATH 上；
+若本机只有 bun，可用便携 node（解压 node-v*-darwin-arm64 到临时目录并临时加入 PATH）运行，否则 vue-tsc 会误报
+`Cannot find module './App.vue'`。
+
 `./tools/verify/run-all.sh`（需后端在 :5099 运行）一键跑 8 项独立校验：结构与信号一致性、中枢几何独立复算、
 跨显示窗口可复现性、无未来函数（截断对照）、线段正确性核对、可用性度量、绩效严格检验、绩效稳健性。
 

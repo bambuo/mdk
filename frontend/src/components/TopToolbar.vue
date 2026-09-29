@@ -89,21 +89,21 @@ function filterOption(input: string, option: { label?: string }) {
   return label.toUpperCase().includes(input.trim().toUpperCase())
 }
 
-function toKeys(keys: string[]): keyof Toggles[] {
+/** 把"勾选中的键"整体写回 toggles：主开关与浮层各自只持有自己那部分，合并后再发出 */
+function applyToggles(keys: string[]): void {
   const next = { ...props.toggles }
   for (const it of toggleItems) next[it.key] = keys.includes(it.key as keyof Toggles)
   emit('update:toggles', next)
-  return keys as (keyof Toggles)[]
 }
 
 const primaryKeys = computed<string[]>({
   get: () => primaryItems.filter(it => props.toggles[it.key]).map(it => it.key),
-  set: (keys) => void toKeys([...keys, ...secondaryKeys.value]),
+  set: (keys) => applyToggles([...keys, ...secondaryKeys.value]),
 })
 
 const secondaryKeys = computed<string[]>({
   get: () => secondaryItems.filter(it => props.toggles[it.key]).map(it => it.key),
-  set: (keys) => void toKeys([...primaryKeys.value, ...keys]),
+  set: (keys) => applyToggles([...primaryKeys.value, ...keys]),
 })
 
 /** 「更多图层」按钮上显示已启用的辅助图层数量，收起不等于关闭 */
