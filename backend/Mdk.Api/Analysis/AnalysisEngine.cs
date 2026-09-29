@@ -20,7 +20,9 @@ public static class AnalysisEngine
         Chan.ChanOptions? chanOptions = null,
         IReadOnlyList<Candle>? chanCandles = null,
         IReadOnlyList<Candle>? subLevelCandles = null,
-        string? subLevelInterval = null)
+        string? subLevelInterval = null,
+        IReadOnlyList<Candle>? lowerLevelCandles = null,
+        string? lowerLevelInterval = null)
     {
         var so = signalOptions ?? SignalOptions.Default;
         var closes = candles.Select(c => c.Close).ToArray();
@@ -128,6 +130,60 @@ public static class AnalysisEngine
             }).ToList();
         var allSignals = chanSignals.Count == 0 ? signals : [.. signals, .. chanSignals];
 
+        // 多级别结构（高周期 / 本级别 / 次级别）：同一张图叠加显示，并标注本级别中枢的级别归属
+        IReadOnlyList<ChanLevelStructure>? chanLevels = null;
+        List<ChanPivotInfo>? annotatedPrimaryPivots = null;
+        if (chanResult is not null)
+        {
+            var displayFrom = candles[0].Time;
+            var displayTo = candles[^1].Time;
+            var primaryPivots = Chan.ChanLevelMapper.ToPivotInfos(candles, chanResult, displayFrom, displayTo, 10);
+
+            var higherPivots = htfChan is not null && htfCandles is not null
+                ? Chan.ChanLevelMapper.ToPivotInfos(htfCandles, htfChan, displayFrom, displayTo, 6)
+                : [];
+            Chan.ChanResult? lowerChan = null;
+            if (lowerLevelCandles is { Count: > 100 } && lowerLevelInterval is not null)
+            {
+                var ltfCloses = lowerLevelCandles.Select(c => c.Close).ToArray();
+                lowerChan = Chan.ChanAnalyzer.Analyze(
+                    lowerLevelCandles,
+                    Macd.Compute(ltfCloses).Hist,
+                    Atr.Compute(lowerLevelCandles.Select(c => c.High).ToArray(), lowerLevelCandles.Select(c => c.Low).ToArray(), ltfCloses, 14),
+                    chanOpt.Clone(requireSubLevelConfirm: false));
+            }
+            var lowerPivots = lowerChan is not null && lowerLevelCandles is not null
+                ? Chan.ChanLevelMapper.ToPivotInfos(lowerLevelCandles, lowerChan, displayFrom, displayTo, 30)
+                : [];
+
+            annotatedPrimaryPivots = primaryPivots
+                .Select(pv =>
+                {
+                    var (inside, lowerCount) = Chan.ChanLevelMapper.Annotate(pv, higherPivots, lowerPivots);
+                    return pv with
+                    {
+                        InsideHigher = htfChan is null ? null : inside,
+                        LowerPivotCount = lowerChan is null ? null : lowerCount,
+                    };
+                })
+                .ToList();
+
+            var chanLevelList = new List<ChanLevelStructure>();
+            if (htfChan is not null && htfCandles is not null && htfInterval is not null)
+            {
+                chanLevelList.Add(new ChanLevelStructure("higher", htfInterval, higherPivots,
+                    LastDirection(htfChan), htfChan.Points.Count, Chan.ChanLevelMapper.CoverageFromTime(htfCandles)));
+            }
+            chanLevelList.Add(new ChanLevelStructure("primary", interval, annotatedPrimaryPivots,
+                LastDirection(chanResult), chanResult.Points.Count, Chan.ChanLevelMapper.CoverageFromTime(candles)));
+            if (lowerChan is not null && lowerLevelCandles is not null && lowerLevelInterval is not null)
+            {
+                chanLevelList.Add(new ChanLevelStructure("lower", lowerLevelInterval, lowerPivots,
+                    LastDirection(lowerChan), lowerChan.Points.Count, Chan.ChanLevelMapper.CoverageFromTime(lowerLevelCandles)));
+            }
+            chanLevels = chanLevelList;
+        }
+
         var series = new Dictionary<string, double?[]>(StringComparer.Ordinal)
         {
             ["ema20"] = ToNullable(ema20),
@@ -166,7 +222,9 @@ public static class AnalysisEngine
             chanResult is null
                 ? null
                 : BuildChanSummary(candles, chanResult,
-                    htfChan is null || htfInterval is null ? null : BuildHigherContext(htfCandles!, htfChan, htfInterval)));
+                    htfChan is null || htfInterval is null ? null : BuildHigherContext(htfCandles!, htfChan, htfInterval),
+                    annotatedPrimaryPivots),
+            chanLevels);
     }
 
     /// <summary>高周期结构上下文：当前笔方向、价格相对最新中枢、最近买卖点。</summary>
@@ -189,8 +247,12 @@ public static class AnalysisEngine
             SignalCount: htf.Points.Count);
     }
 
+    private static string LastDirection(Chan.ChanResult result) =>
+        result.Strokes.Count == 0 ? "none" : result.Strokes[^1].IsUp ? "up" : "down";
+
     private static ChanSummary BuildChanSummary(
-        IReadOnlyList<Candle> candles, Chan.ChanResult result, ChanContextSummary? higherContext = null)
+        IReadOnlyList<Candle> candles, Chan.ChanResult result, ChanContextSummary? higherContext = null,
+        IReadOnlyList<ChanPivotInfo>? annotatedPivots = null)
     {
         var lastStroke = result.Strokes.Count > 0 ? result.Strokes[^1] : default;
         var pivot = result.Pivots.Count > 0 ? result.Pivots[^1] : (Chan.ChanPivot?)null;
@@ -199,7 +261,7 @@ public static class AnalysisEngine
 
         // 笔数与中枢数都按"与显示窗口有交集"统计——与图表实际画出的内容一致，
         // 否则会出现"卡片写 11 个中枢、图上只有 6 个"的口径不符（2026-09-29 用户反馈）。
-        var visiblePivots = BuildPivotInfos(candles, result);
+        var visiblePivots = annotatedPivots ?? BuildPivotInfos(candles, result);
         var visibleStrokes = result.Strokes.Count(s => s.EndBarIndex >= 0 && s.StartBarIndex < candles.Count);
 
         return new ChanSummary(

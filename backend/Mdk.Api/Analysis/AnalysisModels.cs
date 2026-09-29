@@ -39,7 +39,28 @@ public readonly record struct SwingPoint(int Index, double Price, bool IsHigh);
 public sealed record MacdSeries(double?[] Dif, double?[] Dea, double?[] Hist);
 
 /// <summary>一个中枢的区间信息（供前端绘制中枢色带与列表）。</summary>
-public sealed record ChanPivotInfo(long FromTime, long ToTime, double Zg, double Zd, int Strokes, bool IsConfirmed);
+public sealed record ChanPivotInfo(
+    long FromTime,
+    long ToTime,
+    double Zg,
+    double Zd,
+    int Strokes,
+    bool IsConfirmed,
+    /// <summary>是否落在某个高周期中枢内（多级别归属，仅本级别中枢有值）。</summary>
+    bool? InsideHigher = null,
+    /// <summary>内部包含的次级别中枢数量（仅本级别中枢有值）。</summary>
+    int? LowerPivotCount = null);
+
+/// <summary>某个周期的结构摘要（多级别叠加视图用）。</summary>
+public sealed record ChanLevelStructure(
+    /// <summary>higher=高周期 / primary=本级别 / lower=次级别</summary>
+    string Role,
+    string Interval,
+    IReadOnlyList<ChanPivotInfo> Pivots,
+    string LastStrokeDirection,
+    int SignalCount,
+    /// <summary>该级别数据的起始时间（数据不足以覆盖整个显示窗口时，前端据此提示）。</summary>
+    long CoverageFromTime);
 
 /// <summary>高周期（L1）结构上下文：用于"级别共振"展示（当前笔方向、价格相对最新中枢、最近买卖点）。</summary>
 public sealed record ChanContextSummary(
@@ -85,7 +106,9 @@ public sealed record AnalysisResult(
     IReadOnlyList<TradeSignal> Signals,
     IReadOnlyDictionary<string, double?[]> Series,
     MacdSeries Macd,
-    ChanSummary? Chan = null);
+    ChanSummary? Chan = null,
+    /// <summary>多级别结构（高周期 / 本级别 / 次级别）；无对应数据时该级别缺省。</summary>
+    IReadOnlyList<ChanLevelStructure>? ChanLevels = null);
 
 public sealed record KlinesResponse(
     string Market,

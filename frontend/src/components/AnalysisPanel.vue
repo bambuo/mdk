@@ -33,6 +33,27 @@ const confluenceOnly = ref(false)
 /** 共振分组绩效（来自 byConfluence） */
 const confluenceStats = computed(() => props.stats?.byConfluence ?? [])
 
+/** 次级别数据覆盖提示（覆盖不足时说明从何时开始有数据） */
+const lowerCoverageHint = computed(() => {
+  const levels = props.analysis?.chanLevels
+  if (!levels) return ''
+  const lower = levels.find(l => l.role === 'lower')
+  const primary = levels.find(l => l.role === 'primary')
+  if (!lower || !primary || !lower.pivots.length || !primary.pivots.length) return ''
+  const primaryStart = Math.min(...primary.pivots.map(p => p.fromTime))
+  if (lower.coverageFromTime <= primaryStart) return ''
+  return `次级别数据自 ${formatTime(lower.coverageFromTime)} 起（更早区域未覆盖）`
+})
+
+/** 中枢的级别归属说明 */
+function pivotTooltip(p: { insideHigher?: boolean | null; lowerPivotCount?: number | null }) {
+  const parts: string[] = []
+  if (p.insideHigher === true) parts.push('位于高周期中枢区域内（大级别震荡中）')
+  if (p.insideHigher === false) parts.push('不在高周期中枢区域内（大级别之外）')
+  if (p.lowerPivotCount != null) parts.push(`运行期间形成 ${p.lowerPivotCount} 个次级别中枢`)
+  return parts.join(' · ')
+}
+
 /** 共振标签展示 */
 function confluenceLabel(tag: string | null): string {
   if (tag === 'aligned') return '共振'
@@ -166,11 +187,38 @@ function sideColor(side: string) {
         </span>
       </div>
 
+      <!-- 多级别中枢概览：高周期（大区间）/ 本级别 / 次级别（细粒度） -->
+      <div v-if="analysis.chanLevels && analysis.chanLevels.length > 1" class="chan-levels">
+        <div class="lv-hd"><span>级别</span><span>中枢</span><span class="ta-r">最新区间</span></div>
+        <div v-for="lv in analysis.chanLevels" :key="lv.role" class="lv-row">
+          <span class="lv-name" :class="lv.role">
+            {{ lv.role === 'higher' ? '高周期' : lv.role === 'primary' ? '本级别' : '次级别' }}
+            <i>{{ lv.interval }}</i>
+          </span>
+          <span class="lv-count">{{ lv.pivots.length }}</span>
+          <span class="lv-range ta-r">
+            <template v-if="lv.pivots.length">
+              {{ formatPrice(lv.pivots[lv.pivots.length - 1].zd) }} ~ {{ formatPrice(lv.pivots[lv.pivots.length - 1].zg) }}
+            </template>
+            <template v-else>—</template>
+          </span>
+        </div>
+        <p class="lv-hint">
+          色带：<span class="dot higher" />高周期 <span class="dot primary" />本级别 <span class="dot lower" />次级别
+          <template v-if="lowerCoverageHint"> · {{ lowerCoverageHint }}</template>
+        </p>
+      </div>
+
       <!-- 中枢列表：缠论结构的核心，最近的在前 -->
       <div v-if="analysis.chan.pivots.length" class="chan-pivots">
         <div class="pivot-hd"><span>中枢区间</span><span>笔数</span><span>状态</span></div>
-        <div v-for="p in [...analysis.chan.pivots].reverse().slice(0, 4)" :key="p.fromTime" class="pivot-row">
-          <span class="pivot-range">{{ formatPrice(p.zd) }} ~ {{ formatPrice(p.zg) }}</span>
+        <div v-for="p in [...analysis.chan.pivots].reverse().slice(0, 4)" :key="p.fromTime" class="pivot-row"
+             :title="pivotTooltip(p)">
+          <span class="pivot-range">
+            {{ formatPrice(p.zd) }} ~ {{ formatPrice(p.zg) }}
+            <i v-if="p.insideHigher" class="nest">4h内</i>
+            <i v-if="p.lowerPivotCount" class="nest">+{{ p.lowerPivotCount }}小</i>
+          </span>
           <span class="pivot-strokes">{{ p.strokes }}</span>
           <span class="pivot-state" :class="{ live: !p.isConfirmed }">{{ p.isConfirmed ? '已离开' : '进行中' }}</span>
         </div>
@@ -459,6 +507,93 @@ function sideColor(side: string) {
 .conf-badge.counter {
   color: #6b7280;
   border: 1px solid #2c313a;
+}
+
+/* ── 多级别概览 ── */
+.chan-levels {
+  margin-top: 8px;
+  padding-top: 6px;
+  border-top: 1px solid #1e222a;
+}
+
+.lv-hd,
+.lv-row {
+  display: grid;
+  grid-template-columns: 1fr 30px 1fr;
+  gap: 6px;
+  font-size: 11px;
+  padding: 1px 0;
+}
+
+.lv-hd {
+  color: #5c6470;
+  font-size: 10px;
+}
+
+.lv-name i {
+  font-style: normal;
+  color: #6b7280;
+  margin-left: 3px;
+  font-size: 10px;
+}
+
+.lv-name.higher {
+  color: #f0a050;
+}
+
+.lv-name.primary {
+  color: #c678dd;
+}
+
+.lv-name.lower {
+  color: #5aaaf0;
+}
+
+.lv-count {
+  text-align: right;
+  color: #9aa3b0;
+  font-variant-numeric: tabular-nums;
+}
+
+.lv-range {
+  color: #d1d4dc;
+  font-variant-numeric: tabular-nums;
+}
+
+.lv-hint {
+  margin: 4px 0 0;
+  font-size: 10px;
+  color: #5c6470;
+}
+
+.lv-hint .dot {
+  display: inline-block;
+  width: 7px;
+  height: 7px;
+  border-radius: 1px;
+  margin: 0 2px 0 4px;
+}
+
+.lv-hint .dot.higher {
+  background: rgba(240, 160, 80, 0.55);
+}
+
+.lv-hint .dot.primary {
+  background: rgba(198, 120, 221, 0.6);
+}
+
+.lv-hint .dot.lower {
+  background: rgba(90, 170, 240, 0.5);
+}
+
+.nest {
+  font-style: normal;
+  font-size: 9px;
+  color: #6b7280;
+  border: 1px solid #2c313a;
+  border-radius: 2px;
+  padding: 0 2px;
+  margin-left: 3px;
 }
 
 /* ── 缠论中枢列表 ── */

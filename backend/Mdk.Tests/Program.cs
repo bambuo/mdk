@@ -22,6 +22,7 @@ public static class Program
         ChanTests.Register(kit);
         ChanBackfillTests.Register(kit);
         ConfluenceTaggerTests.Register(kit);
+        ChanLevelMapperTests.Register(kit);
 
         return kit.RunAll();
     }

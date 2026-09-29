@@ -179,19 +179,7 @@ public sealed class SignalBackfillService(
 
         var seedFrom = now - days * 86400L;
         // A/B 对照：可关闭次级别确认（Origin 与键后缀区分，互不覆盖）
-        var options = subLevelConfirm
-            ? _chanOptions
-            : new ChanOptions
-            {
-                Enabled = _chanOptions.Enabled,
-                StrokeMode = _chanOptions.StrokeMode,
-                DivergenceAreaRatio = _chanOptions.DivergenceAreaRatio,
-                MaxPoints = _chanOptions.MaxPoints,
-                WarmupBars = _chanOptions.WarmupBars,
-                AnalysisBars = _chanOptions.AnalysisBars,
-                RequireSubLevelConfirm = false,
-                SubLevelConfirmWindowBars = _chanOptions.SubLevelConfirmWindowBars,
-            };
+        var options = subLevelConfirm ? _chanOptions : _chanOptions.Clone(requireSubLevelConfirm: false);
         var origin = subLevelConfirm ? "backfill" : "backfill-nosub";
         var keySuffix = subLevelConfirm ? "|bf" : "|bfn";
         var signals = ChanBackfill.Replay(main, sub, subInterval, htf, htfInterval, options, seedFrom, toSec);

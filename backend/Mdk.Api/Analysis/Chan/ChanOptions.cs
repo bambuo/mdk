@@ -51,5 +51,27 @@ public sealed class ChanOptions
     /// </summary>
     public int ConfluenceWindowBars { get; set; } = 1;
 
+    /// <summary>是否计算并返回多级别结构（高周期/本级别/次级别同级叠加显示）。</summary>
+    public bool MultiLevel { get; set; } = true;
+
+    /// <summary>次级别结构所需的最少K线数（不足则只返回本级别与高周期）。</summary>
+    public int LowerLevelMinBars { get; set; } = 300;
+
+    /// <summary>复制一份（可覆盖个别开关）。用于"关闭次级别确认"等变体，避免手写复制导致字段漏配。</summary>
+    public ChanOptions Clone(bool? requireSubLevelConfirm = null, bool? multiLevel = null) => new()
+    {
+        Enabled = Enabled,
+        StrokeMode = StrokeMode,
+        DivergenceAreaRatio = DivergenceAreaRatio,
+        MaxPoints = MaxPoints,
+        WarmupBars = WarmupBars,
+        AnalysisBars = AnalysisBars,
+        RequireSubLevelConfirm = requireSubLevelConfirm ?? RequireSubLevelConfirm,
+        SubLevelConfirmWindowBars = SubLevelConfirmWindowBars,
+        ConfluenceWindowBars = ConfluenceWindowBars,
+        MultiLevel = multiLevel ?? MultiLevel,
+        LowerLevelMinBars = LowerLevelMinBars,
+    };
+
     public int MinMergedBarsBetween => StrokeMode.Equals("Strict", StringComparison.OrdinalIgnoreCase) ? 3 : 2;
 }

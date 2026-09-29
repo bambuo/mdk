@@ -55,7 +55,15 @@ const COLORS = {
  * 中枢色带：以半透明矩形填充 [Zd, Zg] 区间（轻量图表无原生色带，用 pane 自绘 primitive 实现）。
  * 这是"以缠论结构为主"的主要视觉载体——中枢是缠论的核心结构。
  */
-interface PivotBand { from: number; to: number; zg: number; zd: number; confirmed: boolean }
+interface PivotBand {
+  from: number
+  to: number
+  zg: number
+  zd: number
+  confirmed: boolean
+  /** higher=高周期（宽区间）/ primary=本级别 / lower=次级别（细粒度） */
+  level: 'higher' | 'primary' | 'lower'
+}
 
 class PivotBandRenderer implements IPrimitivePaneRenderer {
   constructor(
@@ -71,36 +79,42 @@ class PivotBandRenderer implements IPrimitivePaneRenderer {
     target.useMediaCoordinateSpace(scope => {
       const ctx = scope.context
       const timeScale = chart.timeScale()
-      const lastIndex = this.bands.length - 1
-      this.bands.forEach((b, index) => {
+      const primaries = this.bands.filter(b => b.level === 'primary')
+      const lastPrimary = primaries.length ? primaries[primaries.length - 1] : null
+      this.bands.forEach(b => {
         const x1 = timeScale.timeToCoordinate(b.from as UTCTimestamp)
         const x2 = timeScale.timeToCoordinate(b.to as UTCTimestamp)
         const yTop = series.priceToCoordinate(b.zg)
         const yBot = series.priceToCoordinate(b.zd)
         if (x1 == null || x2 == null || yTop == null || yBot == null) return
-        const isLatest = index === lastIndex
+        const isLatest = b.level === 'primary' && b === lastPrimary
         const left = Math.min(x1, x2)
         const width = Math.max(2, Math.abs(x2 - x1))
         const top = Math.min(yTop, yBot)
         const height = Math.max(2, Math.abs(yBot - yTop))
-        // 越新的中枢越醒目：最新中枢实心填充 + 实线边框 + 标注；历史中枢淡化为参考
+        // 按级别分色：高周期=暖橙（大区间，淡）、本级别=紫（主体）、次级别=蓝（细粒度，更淡）
+        const palette = b.level === 'higher'
+          ? { fill: 'rgba(240,160,80,0.07)', stroke: 'rgba(240,160,80,0.35)', dash: [8, 4] }
+          : b.level === 'lower'
+            ? { fill: 'rgba(90,170,240,0.08)', stroke: 'rgba(90,170,240,0.35)', dash: [3, 3] }
+            : { fill: b.confirmed ? 'rgba(198,120,221,0.15)' : 'rgba(198,120,221,0.09)', stroke: 'rgba(198,120,221,0.5)', dash: [4, 3] }
         const fill = isLatest
           ? b.confirmed ? 'rgba(198,120,221,0.26)' : 'rgba(198,120,221,0.16)'
-          : b.confirmed ? 'rgba(198,120,221,0.15)' : 'rgba(198,120,221,0.09)'
+          : palette.fill
         const stroke = isLatest
           ? b.confirmed ? 'rgba(214,150,235,0.95)' : 'rgba(214,150,235,0.6)'
-          : 'rgba(198,120,221,0.5)'
+          : palette.stroke
         ctx.fillStyle = fill
         ctx.fillRect(left, top, width, height)
         ctx.strokeStyle = stroke
         ctx.lineWidth = isLatest ? 1.5 : 1
-        ctx.setLineDash(isLatest ? [] : [4, 3])
+        ctx.setLineDash(isLatest ? [] : palette.dash)
         ctx.strokeRect(left, top, width, height)   // 四边封闭，读作"箱体"
         ctx.setLineDash([])
         if (isLatest) {
           ctx.font = '10px sans-serif'
           ctx.fillStyle = 'rgba(226,180,240,0.95)'
-          ctx.fillText(b.confirmed ? '中枢' : '中枢（进行中）', left + 4, top - 4)
+          ctx.fillText('中枢', left + 4, top - 4)
         }
       })
     })
@@ -222,9 +236,17 @@ function applyOverlayLines() {
   chanZgSeries?.setData([])
   chanZdSeries?.setData([])
   const pivots = a.chan?.pivots ?? []
-  pivotBands?.setBands(pivots.map(p => ({
-    from: p.fromTime, to: p.toTime, zg: p.zg, zd: p.zd, confirmed: p.isConfirmed,
-  })))
+  const bands: PivotBand[] = []
+  for (const level of a.chanLevels ?? []) {
+    if (level.role !== 'primary' && !props.toggles.multiLevel) continue   // 多级别关闭时只画本级别
+    for (const p of level.pivots) {
+      bands.push({ from: p.fromTime, to: p.toTime, zg: p.zg, zd: p.zd, confirmed: p.isConfirmed, level: level.role })
+    }
+  }
+  if (!bands.length) {
+    for (const p of pivots) bands.push({ from: p.fromTime, to: p.toTime, zg: p.zg, zd: p.zd, confirmed: p.isConfirmed, level: 'primary' })
+  }
+  pivotBands?.setBands(bands)
 
   // 最新中枢的上下沿额外画到价格轴，便于直接读出 ZG / ZD 价位
   for (const line of pivotPriceLines) candleSeries?.removePriceLine(line)

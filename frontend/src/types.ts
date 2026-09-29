@@ -76,6 +76,20 @@ export interface ChanPivotInfo {
   zd: number
   strokes: number
   isConfirmed: boolean
+  /** 是否落在高周期中枢内（仅本级别中枢有值） */
+  insideHigher?: boolean | null
+  /** 该中枢运行期间出现的次级别中枢数量（仅本级别中枢有值） */
+  lowerPivotCount?: number | null
+}
+
+/** 多级别结构（高周期 / 本级别 / 次级别） */
+export interface ChanLevelStructure {
+  role: 'higher' | 'primary' | 'lower'
+  interval: string
+  pivots: ChanPivotInfo[]
+  lastStrokeDirection: 'up' | 'down' | 'none'
+  signalCount: number
+  coverageFromTime: number
 }
 
 /** 缠论结构摘要 */
@@ -121,6 +135,7 @@ export interface AnalysisResult {
   series: Record<string, (number | null)[]>
   macd: MacdSeries
   chan: ChanSummary | null
+  chanLevels: ChanLevelStructure[] | null
 }
 
 /** 图表指标显示开关 */
@@ -131,8 +146,10 @@ export interface Toggles {
   boll: boolean
   levels: boolean
   signals: boolean
-  /** 缠论图层：笔折线 + 中枢带 + 分型点（默认关，避免画面过密） */
+  /** 缠论图层：笔折线 + 中枢带 + 分型点 */
   chan: boolean
+  /** 多级别叠加：同时显示高周期与次级别中枢（宽/细色带） */
+  multiLevel: boolean
 }
 
 /** 单来源信号的历史绩效（事后评估，扣费口径见后端） */

@@ -72,7 +72,23 @@ public sealed class AnalysisService(
             }
         }
 
-        var result = AnalysisEngine.Compute(market, pair, interval, candles, _signalOptions, htf, htfInterval, _chanOptions, chanWindow, subLevel, subLevelInterval);
+        // 多级别结构：次级别数据需覆盖"显示窗口 + 预热"，用于在图上叠加更细粒度的中枢
+        IReadOnlyList<Models.Candle>? lowerLevel = null;
+        var lowerLevelInterval = MarketIntervals.LowerInterval(interval);
+        if (_chanOptions.Enabled && _chanOptions.MultiLevel && lowerLevelInterval != null)
+        {
+            try
+            {
+                lowerLevel = await GetLowerLevelCachedAsync(market, pair, lowerLevelInterval, candles[0].Time, ct);
+            }
+            catch (Exception ex) when (ex is BinanceException or HttpRequestException or TaskCanceledException)
+            {
+                // 次级别数据缺失时只返回本级别与高周期
+            }
+        }
+
+        var result = AnalysisEngine.Compute(market, pair, interval, candles, _signalOptions, htf, htfInterval,
+            _chanOptions, chanWindow, subLevel, subLevelInterval, lowerLevel, lowerLevelInterval);
         RecordSignals(market, pair, interval, result);
         return result;
     }
@@ -105,6 +121,27 @@ public sealed class AnalysisService(
                 RecordedAt = now,
             });
         }
+    }
+
+    /// <summary>次级别K线（覆盖显示窗口 + 预热），用于多级别结构叠加。</summary>
+    private async Task<IReadOnlyList<Models.Candle>> GetLowerLevelCachedAsync(
+        MarketKind market, TradingPair pair, string lowerInterval, long displayFromTime, CancellationToken ct)
+    {
+        var key = $"lower|{market}|{pair.Symbol}|{lowerInterval}";
+        var lowerSeconds = MarketIntervals.IntervalSeconds(lowerInterval);
+        var warmup = _chanOptions.LowerLevelMinBars * lowerSeconds;   // 次级别自身也需要预热才能形成结构
+        var fromSec = displayFromTime - warmup;
+
+        if (_htfCache.TryGetValue(key, out var hit) && DateTimeOffset.UtcNow - hit.At < HtfCacheTtl
+            && hit.Candles.Count > 0 && hit.Candles[0].Time <= fromSec)
+        {
+            return hit.Candles;
+        }
+
+        var now = DateTimeOffset.UtcNow.ToUnixTimeSeconds();
+        var candles = await rest.GetKlinesRangeAsync(market, pair, lowerInterval, fromSec, now, ct);
+        _htfCache[key] = (candles, DateTimeOffset.UtcNow);
+        return candles;
     }
 
     private async Task<IReadOnlyList<Models.Candle>> GetSubLevelCachedAsync(MarketKind market, TradingPair pair, string subInterval, CancellationToken ct)
