@@ -38,6 +38,8 @@ public sealed class SignalJournalEntry
     [JsonPropertyName("atrPct")] public double? AtrPct { get; set; }
     [JsonPropertyName("bandwidthPct")] public double? BandwidthPct { get; set; }
     [JsonPropertyName("recordedAt")] public long RecordedAt { get; set; }
+    /// <summary>来源：live=部署后在线记录；backfill=历史回填（事后一次性生成，存在事后挑选风险，统计时需区分）。</summary>
+    [JsonPropertyName("origin")] public string Origin { get; set; } = "live";
     [JsonPropertyName("outcome")] public SignalOutcome? Outcome { get; set; }
 }
 
@@ -125,7 +127,9 @@ public sealed record SignalSourceStats(
     /// <summary>分级依据说明（不达标时给出具体原因，便于前端展示与自查）。</summary>
     string GradeReason,
     /// <summary>集中度：样本最多的单一标的占比（0~1），用于识别"靠单个标的的行情撑起统计"。</summary>
-    double TopSymbolShare);
+    double TopSymbolShare,
+    /// <summary>其中来自历史回填的样本数（事后生成，参考价值低于在线样本）。</summary>
+    int NBackfill);
 
 
 /// <summary>按市场状态/共振状态分组的绩效（用于判断信号的状态依赖性）。</summary>

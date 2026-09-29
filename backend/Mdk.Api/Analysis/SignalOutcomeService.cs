@@ -63,10 +63,16 @@ public sealed class SignalOutcomeService(
             if (!MarketKindExtensions.TryParse(marketStr, out var market)) continue;
             if (!TradingPair.TryParse(symbol, out var pair)) continue;
 
+            // 按该组待评估信号的**时间范围**取K线（而非固定取最近 1000 根）：
+            // 历史回填样本可能早于最近 1000 根，用固定窗口会被误判为 expired。
+            var barSeconds = MarketIntervals.IntervalSeconds(interval);
+            var horizonBars = _options.OutcomeHorizonBars;
+            var fromSec = group.Min(e => e.Time) - barSeconds;
+            var toSec = group.Max(e => e.Time) + barSeconds * (horizonBars + 2);
             Models.Candle[] candles;
             try
             {
-                candles = await rest.GetKlinesAsync(market, pair, interval, 1000, ct);
+                candles = await rest.GetKlinesRangeAsync(market, pair, interval, fromSec, toSec, ct);
             }
             catch (BinanceException ex)
             {
@@ -76,7 +82,7 @@ public sealed class SignalOutcomeService(
             if (candles.Length == 0) continue;
 
             var closes = candles.Select(c => c.Close).ToArray();
-            var horizon = _options.OutcomeHorizonBars;
+            var horizon = horizonBars;
 
             foreach (var entry in group)
             {

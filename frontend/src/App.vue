@@ -33,6 +33,49 @@ const livePrice = ref<number | null>(null)
 const lastPushAt = ref<number | null>(null)
 // 信号历史绩效（按当前 市场/币种/周期 查询）
 const signalStats = ref<SignalStatsResponse | null>(null)
+// 浏览器提醒：新的"已确认缠论信号"推送到桌面通知（需用户授权；开关持久化在 localStorage）
+const notifyEnabled = ref(localStorage.getItem('mdk.notify') === '1')
+const seenSignals = new Set<string>()
+
+function toggleNotify() {
+  if (notifyEnabled.value) {
+    notifyEnabled.value = false
+    localStorage.setItem('mdk.notify', '0')
+    return
+  }
+  if (!('Notification' in window)) {
+    Message.warning('当前浏览器不支持桌面通知')
+    return
+  }
+  Notification.requestPermission().then(permission => {
+    if (permission === 'granted') {
+      notifyEnabled.value = true
+      localStorage.setItem('mdk.notify', '1')
+      Message.success('已开启信号提醒：新的已确认缠论信号会弹出桌面通知')
+    } else {
+      Message.warning('通知权限被拒绝，请在浏览器设置中允许')
+    }
+  })
+}
+
+/** 对本次分析结果中的"新的已确认缠论信号"发桌面通知（同一信号只提醒一次） */
+function notifyNewChanSignals(result: AnalysisResult) {
+  const fresh = result.signals.filter(s =>
+    s.source === '缠论' && s.isConfirmed &&
+    !seenSignals.has(`${result.symbol}|${result.interval}|${s.side}|${s.time}|${s.note.slice(0, 8)}`))
+  for (const s of fresh) {
+    seenSignals.add(`${result.symbol}|${result.interval}|${s.side}|${s.time}|${s.note.slice(0, 8)}`)
+  }
+  if (!notifyEnabled.value || fresh.length === 0) return
+  // 只在"信号时间足够新"时提醒（历史信号/回填样本不打扰）
+  const cutoff = Date.now() / 1000 - 6 * 3600
+  for (const s of fresh.filter(x => x.time >= cutoff)) {
+    new Notification(`${result.baseAsset}/${result.quoteAsset} ${result.interval} ${s.side === 'buy' ? '买点' : '卖点'}`, {
+      body: `${s.note}\n价格 ${s.price}${s.stopPrice ? ` · 止损参考 ${s.stopPrice.toFixed(4)}` : ''}`,
+      tag: `${result.symbol}-${result.interval}-${s.time}-${s.side}`,
+    })
+  }
+}
 const loading = ref(false)
 const errorMsg = ref('')
 const chartRef = ref<InstanceType<typeof ChartPanel> | null>(null)
@@ -117,7 +160,16 @@ const { status } = useKlineSocket(market, symbol, interval, {
   onAnalysis: result => {
     analysis.value = result
     livePrice.value = result.lastPrice
+    notifyNewChanSignals(result)
   },
+})
+
+// 首次加载时把已有信号标记为"已见"，避免刚打开页面就喷一堆通知
+watch(analysis, first => {
+  if (!first) return
+  for (const s of first.signals.filter(x => x.source === '缠论' && x.isConfirmed)) {
+    seenSignals.add(`${first.symbol}|${first.interval}|${s.side}|${s.time}|${s.note.slice(0, 8)}`)
+  }
 })
 
 function onLocate(price: number) {
@@ -163,6 +215,8 @@ watch([symbol, interval], () => {
         :loading="loading"
         :live-price="livePrice"
         :last-push-at="lastPushAt"
+        :notify-enabled="notifyEnabled"
+        @toggle-notify="toggleNotify"
       />
     </header>
     <div class="body">

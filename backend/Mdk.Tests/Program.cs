@@ -20,6 +20,7 @@ public static class Program
         BollingerBandsTests.Register(kit);
         AnalysisEngineTests.Register(kit);
         ChanTests.Register(kit);
+        ChanBackfillTests.Register(kit);
 
         return kit.RunAll();
     }

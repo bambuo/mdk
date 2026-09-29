@@ -109,6 +109,31 @@ internal static class RestEndpoints
             })
             .WithSummary("趋势方向 + 关键点位 + 买卖点信号 + 指标序列");
 
+        app.MapPost("/api/backfill/run", async (
+                string? market, int? days, string? symbols, string? intervals, bool? subLevel,
+                SignalBackfillService backfill, CancellationToken ct) =>
+            {
+                if (!MarketKindExtensions.TryParse(market, out var marketKind) || marketKind != MarketKind.Spot)
+                    return BadRequest("历史回填目前仅支持现货（market=spot）");
+                var symbolList = (symbols ?? "BTCUSDT,ETHUSDT,SOLUSDT,BNBUSDT,XRPUSDT")
+                    .Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+                var intervalList = (intervals ?? "1h,4h")
+                    .Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+                if (symbolList.Length is 0 or > 30) return BadRequest("symbols 数量需在 1~30 之间");
+                var badInterval = intervalList.FirstOrDefault(i => !MarketIntervals.IsValid(i));
+                if (badInterval is not null) return BadRequest($"不支持的周期 “{badInterval}”");
+
+                var status = backfill.Status;
+                if (status.Running) return Results.Ok(status);   // 已有回填在跑，直接返回进度
+                _ = backfill.RunAsync(Math.Clamp(days ?? 90, 7, 365), symbolList, intervalList, CancellationToken.None,
+                    subLevel ?? true);
+                return Results.Ok(backfill.Status);
+            })
+            .WithSummary("历史回填：拉取历史K线逐根复算缠论信号并入库（异步执行，用 status 查询进度）");
+
+        app.MapGet("/api/backfill/status", (SignalBackfillService backfill) => Results.Ok(backfill.Status))
+            .WithSummary("历史回填进度");
+
         app.MapGet("/api/signal-stats", (
                 string? market, string? symbol, string? interval, int? days,
                 SignalJournal journal) =>
@@ -154,7 +179,8 @@ internal static class RestEndpoints
                         StopHitRate: Rate(items, e => e.Outcome!.StopHit == true),
                         Grade: grade.Grade,
                         GradeReason: grade.Reason,
-                        TopSymbolShare: grade.TopSymbolShare);
+                        TopSymbolShare: grade.TopSymbolShare,
+                        NBackfill: items.Count(e => e.Origin == "backfill"));
                 }
 
                 var bySource = pool

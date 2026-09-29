@@ -15,6 +15,8 @@ const props = defineProps<{
   livePrice: number | null
   /** 最近一次收到实时推送的时间戳（毫秒） */
   lastPushAt: number | null
+  /** 是否已开启桌面提醒 */
+  notifyEnabled: boolean
 }>()
 
 /** 每秒走一次，用于展示"最后推送 N 秒前" */
@@ -39,6 +41,7 @@ const pushAgeText = computed(() => {
 const pushStale = computed(() => props.lastPushAt != null && now.value - props.lastPushAt > 15000)
 
 const emit = defineEmits<{
+  (e: 'toggle-notify'): void
   (e: 'update:market', value: MarketKind): void
   (e: 'update:symbol', value: string): void
   (e: 'update:interval', value: string): void
@@ -159,6 +162,11 @@ const displayChangePct = computed(() => {
       ({{ (displayChangePct ?? 0) >= 0 ? '+' : '' }}{{ (displayChangePct ?? 0).toFixed(2) }}%)
     </span>
     <span class="vol">24h额 {{ formatVolume(currentMeta?.quoteVolume ?? 0) }}</span>
+    <a-tooltip :content="notifyEnabled ? '关闭信号桌面提醒' : '开启信号桌面提醒（新的已确认缠论信号）'">
+      <a-button size="mini" :type="notifyEnabled ? 'primary' : 'text'" @click="emit('toggle-notify')">
+        {{ notifyEnabled ? '提醒已开' : '提醒' }}
+      </a-button>
+    </a-tooltip>
     <span class="status" :class="{ 'status-stale': pushStale }">
       <a-badge :status="statusMeta.color as any" :text="`${statusMeta.text} · ${pushAgeText}`" />
     </span>

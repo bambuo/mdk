@@ -61,6 +61,41 @@ public sealed class BinanceRestClient
         using var response = await SendAsync(market, url, ct);
         var rows = await response.Content.ReadFromJsonAsync<JsonElement[][]>(cancellationToken: ct)
                    ?? throw new BinanceException(-1, "klines 返回为空");
+        return ParseKlines(rows);
+    }
+
+    /// <summary>
+    /// 按时间区间拉取K线（自动分页）：用于历史回填与"读取指定时间点的K线"。
+    /// 从 fromSec 起（含）向 toSec 方向逐页拉取，每页上限 1000（合约 1500），页间短暂停顿以避免打满权重。
+    /// </summary>
+    public async Task<Candle[]> GetKlinesRangeAsync(
+        MarketKind market, TradingPair pair, string interval, long fromSec, long toSec, CancellationToken ct = default)
+    {
+        var pageSize = market == MarketKind.Futures ? 1500 : 1000;
+        var all = new List<Candle>();
+        var cursor = fromSec * 1000;
+        var endMs = toSec * 1000;
+        var guard = 0;
+        while (cursor <= endMs && guard++ < 200)
+        {
+            var url = $"{market.ToRestPath()}/klines?symbol={pair.Symbol}&interval={interval}&startTime={cursor}&endTime={endMs}&limit={pageSize}";
+            using var response = await SendAsync(market, url, ct);
+            var rows = await response.Content.ReadFromJsonAsync<JsonElement[][]>(cancellationToken: ct)
+                       ?? throw new BinanceException(-1, "klines 返回为空");
+            if (rows.Length == 0) break;
+            var page = ParseKlines(rows);
+            all.AddRange(page);
+            var lastMs = rows[^1][0].GetInt64();
+            if (page.Length < pageSize) break;          // 已到区间末尾
+            if (lastMs <= cursor) break;                // 防死循环
+            cursor = lastMs + 1;
+            if (cursor <= endMs) await Task.Delay(120, ct);   // 分页间让出速率
+        }
+        return all.ToArray();
+    }
+
+    private static Candle[] ParseKlines(JsonElement[][] rows)
+    {
         var candles = new Candle[rows.Length];
         for (var i = 0; i < rows.Length; i++)
         {
