@@ -14,12 +14,14 @@ const market = ref<MarketKind>('spot')
 const symbol = ref('BTCUSDT')
 const interval = ref('1h')
 // 用 ref 而非 reactive：TopToolbar 通过 v-model:toggles 整体替换对象
+// 以缠论结构为主：缠论图层默认开；EMA/RSI/MACD 作为辅助保留；BOLL 与支撑阻力线（与中枢带争视觉）默认关
 const toggles = ref<Toggles>({
+  chan: true,
   ema: true,
   rsi: true,
   macd: true,
-  boll: true,
-  levels: true,
+  boll: false,
+  levels: false,
   signals: true,
 })
 

@@ -53,12 +53,13 @@ const marketOptions: { value: MarketKind; label: string }[] = [
 const intervals = ['15m', '30m', '1h', '4h', '1d', '1w']
 
 const toggleItems: { key: keyof Toggles; label: string }[] = [
+  { key: 'chan', label: '缠论' },
+  { key: 'signals', label: '信号' },
   { key: 'ema', label: 'EMA' },
   { key: 'rsi', label: 'RSI' },
   { key: 'macd', label: 'MACD' },
   { key: 'boll', label: 'BOLL' },
   { key: 'levels', label: '点位' },
-  { key: 'signals', label: '信号' },
 ]
 
 const symbolOptions = computed(() =>

@@ -14,6 +14,10 @@ import {
   type ISeriesApi,
   type SeriesMarker,
   type ISeriesMarkersPluginApi,
+  type ISeriesPrimitive,
+  type IPrimitivePaneView,
+  type IPrimitivePaneRenderer,
+  type SeriesAttachedParameter,
   type Time,
   type UTCTimestamp,
 } from 'lightweight-charts'
@@ -47,6 +51,94 @@ const COLORS = {
   dea: '#5b8def',
 }
 
+/**
+ * 中枢色带：以半透明矩形填充 [Zd, Zg] 区间（轻量图表无原生色带，用 pane 自绘 primitive 实现）。
+ * 这是"以缠论结构为主"的主要视觉载体——中枢是缠论的核心结构。
+ */
+interface PivotBand { from: number; to: number; zg: number; zd: number; confirmed: boolean }
+
+class PivotBandRenderer implements IPrimitivePaneRenderer {
+  constructor(
+    private bands: PivotBand[],
+    private series: () => ISeriesApi<'Candlestick'> | null,
+    private chart: () => IChartApi | null,
+  ) {}
+
+  draw(target: Parameters<IPrimitivePaneRenderer['draw']>[0]): void {
+    const series = this.series()
+    const chart = this.chart()
+    if (!series || !chart) return
+    target.useMediaCoordinateSpace(scope => {
+      const ctx = scope.context
+      const timeScale = chart.timeScale()
+      const lastIndex = this.bands.length - 1
+      this.bands.forEach((b, index) => {
+        const x1 = timeScale.timeToCoordinate(b.from as UTCTimestamp)
+        const x2 = timeScale.timeToCoordinate(b.to as UTCTimestamp)
+        const yTop = series.priceToCoordinate(b.zg)
+        const yBot = series.priceToCoordinate(b.zd)
+        if (x1 == null || x2 == null || yTop == null || yBot == null) return
+        const isLatest = index === lastIndex
+        const left = Math.min(x1, x2)
+        const width = Math.max(2, Math.abs(x2 - x1))
+        const top = Math.min(yTop, yBot)
+        const height = Math.max(2, Math.abs(yBot - yTop))
+        // 越新的中枢越醒目：最新中枢实心填充 + 实线边框 + 标注；历史中枢淡化为参考
+        const fill = isLatest
+          ? b.confirmed ? 'rgba(198,120,221,0.26)' : 'rgba(198,120,221,0.16)'
+          : b.confirmed ? 'rgba(198,120,221,0.15)' : 'rgba(198,120,221,0.09)'
+        const stroke = isLatest
+          ? b.confirmed ? 'rgba(214,150,235,0.95)' : 'rgba(214,150,235,0.6)'
+          : 'rgba(198,120,221,0.5)'
+        ctx.fillStyle = fill
+        ctx.fillRect(left, top, width, height)
+        ctx.strokeStyle = stroke
+        ctx.lineWidth = isLatest ? 1.5 : 1
+        ctx.setLineDash(isLatest ? [] : [4, 3])
+        ctx.strokeRect(left, top, width, height)   // 四边封闭，读作"箱体"
+        ctx.setLineDash([])
+        if (isLatest) {
+          ctx.font = '10px sans-serif'
+          ctx.fillStyle = 'rgba(226,180,240,0.95)'
+          ctx.fillText(b.confirmed ? '中枢' : '中枢（进行中）', left + 4, top - 4)
+        }
+      })
+    })
+  }
+}
+
+class PivotBandPrimitive implements ISeriesPrimitive<Time> {
+  private bands: PivotBand[] = []
+  private series: ISeriesApi<'Candlestick'> | null = null
+  private chart: IChartApi | null = null
+  private requestUpdate: (() => void) | null = null
+  private readonly view: IPrimitivePaneView
+
+  constructor(private readonly chartRef: () => IChartApi | null) {
+    this.view = {
+      zOrder: () => 'bottom',
+      renderer: () => new PivotBandRenderer(this.bands, () => this.series, () => this.chart),
+    }
+  }
+
+  attached(param: SeriesAttachedParameter<Time>): void {
+    this.series = param.series as ISeriesApi<'Candlestick'>
+    this.chart = this.chartRef()
+    // 保存重绘入口：数据变化时主动请求重绘，否则要等下一次行情推送才刷新
+    this.requestUpdate = param.requestUpdate
+    this.requestUpdate()
+  }
+
+  paneViews(): readonly IPrimitivePaneView[] {
+    return [this.view]
+  }
+
+  setBands(bands: PivotBand[]): void {
+    this.bands = bands
+    this.requestUpdate?.()
+  }
+}
+
 let chart: IChartApi | null = null
 let candleSeries: ISeriesApi<'Candlestick'> | null = null
 let ema20Series: ISeriesApi<'Line'> | null = null
@@ -58,12 +150,19 @@ let bollLowerSeries: ISeriesApi<'Line'> | null = null
 // 信号用快慢线（1h 提速参数 10/30 时后端下发，虚线展示，与显示用 EMA20/50 区分）
 let emaSigFastSeries: ISeriesApi<'Line'> | null = null
 let emaSigSlowSeries: ISeriesApi<'Line'> | null = null
+// 缠论图层：笔折线 + 中枢上下沿
+let chanStrokeSeries: ISeriesApi<'Line'> | null = null
+let chanZgSeries: ISeriesApi<'Line'> | null = null
+let chanZdSeries: ISeriesApi<'Line'> | null = null
 let rsiSeries: ISeriesApi<'Line'> | null = null
 let macdHistSeries: ISeriesApi<'Histogram'> | null = null
 let difSeries: ISeriesApi<'Line'> | null = null
 let deaSeries: ISeriesApi<'Line'> | null = null
 let markersPlugin: ISeriesMarkersPluginApi<Time> | null = null
+let pivotBands: PivotBandPrimitive | null = null
 let priceLines: IPriceLine[] = []
+// 最新中枢的上下沿价格线（ZG / ZD 轴标签）
+let pivotPriceLines: IPriceLine[] = []
 let fitted = false
 /** 当前图表最后一根K线的时间（秒），用于识别乱序/断层数据 */
 let lastBarTime = 0
@@ -118,6 +217,29 @@ function applyOverlayLines() {
   bollLowerSeries?.setData(toLineData(a.series['bollLower']))
   emaSigFastSeries?.setData(toLineData(a.series['emaSigFast']))
   emaSigSlowSeries?.setData(toLineData(a.series['emaSigSlow']))
+  chanStrokeSeries?.setData(toLineData(a.series['chanStroke']))
+  // 中枢改用色带表达（原 chanZg/chanZd 折线保留为空数据，避免视觉重复）
+  chanZgSeries?.setData([])
+  chanZdSeries?.setData([])
+  const pivots = a.chan?.pivots ?? []
+  pivotBands?.setBands(pivots.map(p => ({
+    from: p.fromTime, to: p.toTime, zg: p.zg, zd: p.zd, confirmed: p.isConfirmed,
+  })))
+
+  // 最新中枢的上下沿额外画到价格轴，便于直接读出 ZG / ZD 价位
+  for (const line of pivotPriceLines) candleSeries?.removePriceLine(line)
+  pivotPriceLines = []
+  const latest = pivots[pivots.length - 1]
+  if (latest && candleSeries) {
+    pivotPriceLines.push(candleSeries.createPriceLine({
+      price: latest.zg, color: 'rgba(214,150,235,0.85)', lineWidth: 1,
+      lineStyle: LineStyle.Solid, axisLabelVisible: true, title: 'ZG',
+    }))
+    pivotPriceLines.push(candleSeries.createPriceLine({
+      price: latest.zd, color: 'rgba(214,150,235,0.85)', lineWidth: 1,
+      lineStyle: LineStyle.Solid, axisLabelVisible: true, title: 'ZD',
+    }))
+  }
   rsiSeries?.setData(toLineData(a.series['rsi14']))
   macdHistSeries?.setData(
     toLineData(a.macd.hist).map(d => ({
@@ -155,20 +277,35 @@ function applyLevels() {
   }
 }
 
-/** 买卖点箭头：买点在K线下方 ▲、卖点在上方 ▼ */
+/** 买卖点箭头：买点在K线下方 ▲、卖点在上方 ▼；缠论来源用方形标记区分 */
 function applyMarkers() {
   if (!markersPlugin) return
   const a = props.analysis
   const markers: SeriesMarker<Time>[] = []
   if (a && props.toggles.signals) {
     for (const sig of a.signals) {
-      markers.push({
-        time: sig.time as UTCTimestamp,
-        position: sig.side === 'buy' ? 'belowBar' : 'aboveBar',
-        color: sig.side === 'buy' ? COLORS.up : COLORS.down,
-        shape: sig.side === 'buy' ? 'arrowUp' : 'arrowDown',
-        text: sig.side === 'buy' ? '买' : '卖',
-      })
+      const isChan = sig.source === '缠论'
+      if (isChan) {
+        // 缠论买卖点为主：按类别用 1/2/3 标注，颜色区分买卖
+        markers.push({
+          time: sig.time as UTCTimestamp,
+          position: sig.side === 'buy' ? 'belowBar' : 'aboveBar',
+          color: sig.side === 'buy' ? '#c678dd' : '#e08fd0',
+          shape: 'square',
+          size: 2,
+          text: sig.note.startsWith('[1') ? '1' : sig.note.startsWith('[2') ? '2' : '3',
+        })
+      } else {
+        // 辅助指标信号：弱化展示
+        markers.push({
+          time: sig.time as UTCTimestamp,
+          position: sig.side === 'buy' ? 'belowBar' : 'aboveBar',
+          color: sig.side === 'buy' ? 'rgba(38,166,154,0.45)' : 'rgba(239,83,80,0.45)',
+          shape: 'circle',
+          size: 0.6,
+          text: '',
+        })
+      }
     }
   }
   markersPlugin.setMarkers(markers)
@@ -183,6 +320,9 @@ function applyVisibility() {
   bollLowerSeries?.applyOptions({ visible: props.toggles.boll })
   emaSigFastSeries?.applyOptions({ visible: props.toggles.ema })
   emaSigSlowSeries?.applyOptions({ visible: props.toggles.ema })
+  chanStrokeSeries?.applyOptions({ visible: props.toggles.chan })
+  chanZgSeries?.applyOptions({ visible: props.toggles.chan })
+  chanZdSeries?.applyOptions({ visible: props.toggles.chan })
   rsiSeries?.applyOptions({ visible: props.toggles.rsi })
   macdHistSeries?.applyOptions({ visible: props.toggles.macd })
   difSeries?.applyOptions({ visible: props.toggles.macd })
@@ -274,6 +414,11 @@ onMounted(() => {
   emaSigFastSeries = chart.addSeries(LineSeries, sigLine('rgba(240,185,11,0.55)'))
   emaSigSlowSeries = chart.addSeries(LineSeries, sigLine('rgba(91,141,239,0.55)'))
 
+  // 缠论：笔折线（细实线）+ 中枢上下沿（细线，无价格轴标签以免与支撑阻力线冲突）
+  chanStrokeSeries = chart.addSeries(LineSeries, { color: '#e8c07d', lineWidth: 2, priceLineVisible: false, lastValueVisible: false, crosshairMarkerVisible: false })
+  chanZgSeries = chart.addSeries(LineSeries, { color: 'rgba(198,120,221,0.55)', lineWidth: 1, lineStyle: LineStyle.Dotted, priceLineVisible: false, lastValueVisible: false, crosshairMarkerVisible: false })
+  chanZdSeries = chart.addSeries(LineSeries, { color: 'rgba(198,120,221,0.55)', lineWidth: 1, lineStyle: LineStyle.Dotted, priceLineVisible: false, lastValueVisible: false, crosshairMarkerVisible: false })
+
   rsiSeries = chart.addSeries(
     LineSeries,
     { ...lineOptions(COLORS.rsi), crosshairMarkerVisible: true, priceFormat: { type: 'price', precision: 2, minMove: 0.01 } },
@@ -299,6 +444,8 @@ onMounted(() => {
   )
 
   markersPlugin = createSeriesMarkers(candleSeries, [])
+  pivotBands = new PivotBandPrimitive(() => chart)
+  candleSeries.attachPrimitive(pivotBands)
 
   applySnapshot()
   applyVisibility()

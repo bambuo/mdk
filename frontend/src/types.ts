@@ -66,6 +66,33 @@ export interface MacdSeries {
   hist: (number | null)[]
 }
 
+/** 中枢区间（用于绘制色带与列表） */
+export interface ChanPivotInfo {
+  fromTime: number
+  toTime: number
+  zg: number
+  zd: number
+  strokes: number
+  isConfirmed: boolean
+}
+
+/** 缠论结构摘要 */
+export interface ChanSummary {
+  lastStrokeDirection: 'up' | 'down' | 'none'
+  lastStrokeConfirmed: boolean
+  strokeCount: number
+  pivotCount: number
+  pivotZg: number | null
+  pivotZd: number | null
+  pivotStrokes: number
+  priceInPivot: boolean | null
+  lastKind: string | null
+  lastTime: number | null
+  lastPrice: number | null
+  lastNote: string | null
+  pivots: ChanPivotInfo[]
+}
+
 export interface AnalysisResult {
   market: MarketKind
   symbol: string
@@ -79,6 +106,7 @@ export interface AnalysisResult {
   signals: TradeSignal[]
   series: Record<string, (number | null)[]>
   macd: MacdSeries
+  chan: ChanSummary | null
 }
 
 /** 图表指标显示开关 */
@@ -89,6 +117,8 @@ export interface Toggles {
   boll: boolean
   levels: boolean
   signals: boolean
+  /** 缠论图层：笔折线 + 中枢带 + 分型点（默认关，避免画面过密） */
+  chan: boolean
 }
 
 /** 单来源信号的历史绩效（事后评估，扣费口径见后端） */
@@ -104,6 +134,10 @@ export interface SignalSourceStats {
   stopHitRate: number
   /** 准入分级：可参考 / 仅观察 / 不达标 / 样本不足 */
   grade: string
+  /** 分级依据（不达标时说明具体原因，如 "t=1.66 < 2"） */
+  gradeReason: string
+  /** 集中度：样本最多的单一标的占比 */
+  topSymbolShare: number
 }
 
 /** 分市场状态或分共振状态的分组绩效 */
