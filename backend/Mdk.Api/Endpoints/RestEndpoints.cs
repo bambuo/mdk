@@ -142,16 +142,19 @@ internal static class RestEndpoints
                 SignalSourceStats? Summarize(string source, IReadOnlyList<SignalJournalEntry> items)
                 {
                     if (items.Count == 0) return null;
+                    var grade = SignalQualityRules.Evaluate(items);
                     return new SignalSourceStats(
                         Source: source,
                         N: items.Count,
-                        NEpisodes: CountEpisodes(items),
+                        NEpisodes: SignalQualityRules.EpisodeCount(items),
                         WinRate: Rate(items, e => e.Outcome!.Ret > 0),
                         AvgReturn: items.Average(e => e.Outcome!.Ret ?? 0),
                         AvgExcess: items.Average(e => e.Outcome!.Excess ?? 0),
                         NetPositiveRate: Rate(items, e => e.Outcome!.NetPositive == true),
                         StopHitRate: Rate(items, e => e.Outcome!.StopHit == true),
-                        Grade: Grade(items));
+                        Grade: grade.Grade,
+                        GradeReason: grade.Reason,
+                        TopSymbolShare: grade.TopSymbolShare);
                 }
 
                 var bySource = pool
@@ -199,40 +202,6 @@ internal static class RestEndpoints
                 AvgExcess: g.Average(e => e.Outcome!.Excess ?? 0),
                 NetPositiveRate: Rate(g, e => e.Outcome!.NetPositive == true)))
             .ToList();
-    }
-
-    /// <summary>
-    /// 波次口径：同币种/周期/方向、间隔 24 根以内的信号视为同一波行情（事件聚类），
-    /// 用于修正"信号高度时间聚集导致 t 值虚高"的问题（一个波段算一个有效样本）。
-    /// </summary>
-    private static int CountEpisodes(IReadOnlyList<SignalJournalEntry> items)
-    {
-        var episodes = 0;
-        foreach (var group in items.GroupBy(e => (e.Symbol, e.Interval, e.Side)))
-        {
-            var times = group.Select(e => e.Time).OrderBy(t => t).ToList();
-            var barSeconds = MarketIntervals.IntervalSeconds(group.Key.Interval);
-            var previous = long.MinValue;
-            foreach (var t in times)
-            {
-                if (previous == long.MinValue || t - previous > barSeconds * 24)
-                    episodes++;
-                previous = t;
-            }
-        }
-        return episodes;
-    }
-
-    /// <summary>绩效分级：按样本量 + 扣费后为正比例给出可直接使用的准入标签。</summary>
-    private static string Grade(IReadOnlyList<SignalJournalEntry> items)
-    {
-        var n = items.Count;
-        if (n < 30) return "样本不足";
-        var netPositive = Rate(items, e => e.Outcome!.NetPositive == true);
-        var avgExcess = items.Average(e => e.Outcome!.Excess ?? 0);
-        if (netPositive >= 0.5 && avgExcess > 0) return "可参考";
-        if (netPositive >= 0.35) return "仅观察";
-        return "不达标";
     }
 
     private static double Rate(IEnumerable<SignalJournalEntry> items, Func<SignalJournalEntry, bool> predicate) =>

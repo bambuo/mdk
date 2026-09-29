@@ -2,6 +2,7 @@ using System.Net;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using Mdk.Api.Analysis;
+using Mdk.Api.Analysis.Chan;
 using Mdk.Api.Binance;
 using Mdk.Api.Endpoints;
 
@@ -9,6 +10,7 @@ var builder = WebApplication.CreateBuilder(args);
 
 builder.Services.Configure<BinanceOptions>(builder.Configuration.GetSection(BinanceOptions.SectionName));
 builder.Services.Configure<SignalOptions>(builder.Configuration.GetSection(SignalOptions.SectionName));
+builder.Services.Configure<ChanOptions>(builder.Configuration.GetSection(ChanOptions.SectionName));
 // exchangeInfo（现货约 17MB）必须启用压缩传输并放宽超时，否则会下载超时
 builder.Services.AddHttpClient<BinanceRestClient>(client => client.Timeout = TimeSpan.FromSeconds(60))
     .ConfigurePrimaryHttpMessageHandler(() => new HttpClientHandler

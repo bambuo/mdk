@@ -60,6 +60,21 @@ public static class MarketIntervals
         _ => 3600,
     };
 
+    /// <summary>
+    /// 次级别（下一档周期）；最小档（5m）返回 null。
+    /// 用于"次级别确认"：本级别买卖点需次级别结构同向（缠论中本级别与次级别的关系）。
+    /// </summary>
+    public static string? LowerInterval(string interval) => interval switch
+    {
+        "15m" or "30m" => "5m",
+        "1h" or "2h" => "15m",
+        "4h" or "6h" => "1h",
+        "12h" => "4h",
+        "1d" or "3d" => "4h",
+        "1w" => "1d",
+        _ => null,
+    };
+
     /// <summary>多周期共振用的高一档周期；最高档（1w）返回 null。</summary>
     public static string? HigherInterval(string interval) => interval switch
     {

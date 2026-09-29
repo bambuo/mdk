@@ -9,11 +9,13 @@ namespace Mdk.Api.Analysis;
 public sealed class AnalysisService(
     BinanceRestClient rest,
     IOptions<SignalOptions> signalOptions,
+    IOptions<Chan.ChanOptions> chanOptions,
     SignalJournal journal)
 {
     private static readonly TimeSpan HtfCacheTtl = TimeSpan.FromSeconds(60);
 
     private readonly SignalOptions _signalOptions = signalOptions.Value;
+    private readonly Chan.ChanOptions _chanOptions = chanOptions.Value;
     private readonly ConcurrentDictionary<string, (IReadOnlyList<Models.Candle> Candles, DateTimeOffset At)> _htfCache = new();
 
     /// <summary>最近被请求过的组合（键 → (组合, 最近请求时间)），供关注列表定时分析使用。</summary>
@@ -31,9 +33,14 @@ public sealed class AnalysisService(
     {
         _recent[$"{market}|{pair.Symbol}|{interval}"] = (market, pair, interval, DateTimeOffset.UtcNow);
 
-        var candles = await rest.GetKlinesAsync(market, pair, interval, limit, ct);
-        if (candles.Length == 0)
+        // 缠论使用固定内部窗口（最近 AnalysisBars 根），与显示窗口解耦——保证结构与信号可复现；
+        // 因此取数上限需覆盖两者中较大者。
+        var chanBars = _chanOptions.Enabled ? _chanOptions.AnalysisBars : 0;
+        var fetchBars = Math.Clamp(Math.Max(limit, chanBars), 250, 1500);
+        var fetched = await rest.GetKlinesAsync(market, pair, interval, fetchBars, ct);
+        if (fetched.Length == 0)
             throw new BinanceException(-1, $"暂无K线数据：{pair.Display} {interval}");
+        var (candles, chanWindow) = Chan.ChanWindowSelector.Select(fetched, limit, chanBars);
 
         // 多周期共振：取高一档周期的K线（缓存 60s），失败不阻塞主分析
         IReadOnlyList<Models.Candle>? htf = null;
@@ -50,7 +57,22 @@ public sealed class AnalysisService(
             }
         }
 
-        var result = AnalysisEngine.Compute(market, pair, interval, candles, _signalOptions, htf, htfInterval);
+        // 次级别（下一档周期）数据：用于缠论买卖点的"次级别确认"；失败不阻塞主分析
+        IReadOnlyList<Models.Candle>? subLevel = null;
+        var subLevelInterval = MarketIntervals.LowerInterval(interval);
+        if (_chanOptions.Enabled && _chanOptions.RequireSubLevelConfirm && subLevelInterval != null)
+        {
+            try
+            {
+                subLevel = await GetSubLevelCachedAsync(market, pair, subLevelInterval, ct);
+            }
+            catch (Exception ex) when (ex is BinanceException or HttpRequestException or TaskCanceledException)
+            {
+                // 次级别数据缺失时：不做次级别过滤（由 ChanOptions 语义决定，不阻塞）
+            }
+        }
+
+        var result = AnalysisEngine.Compute(market, pair, interval, candles, _signalOptions, htf, htfInterval, _chanOptions, chanWindow, subLevel, subLevelInterval);
         RecordSignals(market, pair, interval, result);
         return result;
     }
@@ -82,6 +104,18 @@ public sealed class AnalysisService(
                 RecordedAt = now,
             });
         }
+    }
+
+    private async Task<IReadOnlyList<Models.Candle>> GetSubLevelCachedAsync(MarketKind market, TradingPair pair, string subInterval, CancellationToken ct)
+    {
+        var key = $"sub|{market}|{pair.Symbol}|{subInterval}";
+        if (_htfCache.TryGetValue(key, out var hit) && DateTimeOffset.UtcNow - hit.At < HtfCacheTtl)
+            return hit.Candles;
+
+        // 次级别需要更多根才能形成完整笔结构（本级别 700 根 → 次级别约 700/4 根即可，取 300 留余量）
+        var candles = await rest.GetKlinesAsync(market, pair, subInterval, 300, ct);
+        _htfCache[key] = (candles, DateTimeOffset.UtcNow);
+        return candles;
     }
 
     private async Task<IReadOnlyList<Models.Candle>> GetHtfCachedAsync(MarketKind market, TradingPair pair, string htfInterval, CancellationToken ct)

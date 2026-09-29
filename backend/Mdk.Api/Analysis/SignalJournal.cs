@@ -121,7 +121,12 @@ public sealed record SignalSourceStats(
     double AvgExcess,
     double NetPositiveRate,
     double StopHitRate,
-    string Grade);
+    string Grade,
+    /// <summary>分级依据说明（不达标时给出具体原因，便于前端展示与自查）。</summary>
+    string GradeReason,
+    /// <summary>集中度：样本最多的单一标的占比（0~1），用于识别"靠单个标的的行情撑起统计"。</summary>
+    double TopSymbolShare);
+
 
 /// <summary>按市场状态/共振状态分组的绩效（用于判断信号的状态依赖性）。</summary>
 public sealed record SignalBucketStats(
