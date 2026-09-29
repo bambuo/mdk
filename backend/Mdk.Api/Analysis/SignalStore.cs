@@ -33,6 +33,8 @@ public sealed class SignalEntry
     public TradingPair Pair { get; set; }
     public string Interval { get; set; } = "";
     public string Source { get; set; } = "";
+    /// <summary>买卖点类别（缠论："1买"…"3卖"）；其他来源为 null。用于按语境给出经验可信度。</summary>
+    public string? Kind { get; set; }
     public string Side { get; set; } = "";
     /// <summary>信号记账的K线时间（该根收盘后信号才可知，入场价取该根收盘价）。</summary>
     public long Time { get; set; }
@@ -40,6 +42,8 @@ public sealed class SignalEntry
     /// <summary>信号说明原文（含位点价位/触碰次数等，便于事后审计）。</summary>
     public string? Note { get; set; }
     public decimal? StopPrice { get; set; }
+    /// <summary>结构参考价（缠论信号）：用于事后复核"入场是否已经追高"（滞后 ÷ 风险单位）。</summary>
+    public decimal? ReferencePrice { get; set; }
     public bool? TrendAligned { get; set; }
     /// <summary>级别共振标签（aligned/counter/none，仅缠论信号）。</summary>
     public string? Confluence { get; set; }
@@ -120,12 +124,12 @@ public sealed class SignalStore : IDisposable
             using var cmd = _conn.CreateCommand();
             cmd.CommandText = """
                 INSERT OR IGNORE INTO signals
-                    (market, base_asset, quote_asset, interval, source, side, signal_time, is_confirmed,
-                     price, stop_price, note, trend_aligned, confluence, adx, atr_pct, bandwidth_pct,
-                     origin, recorded_at)
+                    (market, base_asset, quote_asset, interval, source, kind, side, signal_time, is_confirmed,
+                     price, stop_price, reference_price, note, trend_aligned, confluence, adx, atr_pct,
+                     bandwidth_pct, origin, recorded_at)
                 VALUES
-                    ($market, $base, $quote, $interval, $source, $side, $time, $confirmed,
-                     $price, $stop, $note, $aligned, $confluence, $adx, $atrPct, $bandwidth,
+                    ($market, $base, $quote, $interval, $source, $kind, $side, $time, $confirmed,
+                     $price, $stop, $reference, $note, $aligned, $confluence, $adx, $atrPct, $bandwidth,
                      $origin, $recordedAt);
                 """;
             cmd.Parameters.AddWithValue("$market", MarketKey(e.Market));
@@ -133,11 +137,13 @@ public sealed class SignalStore : IDisposable
             cmd.Parameters.AddWithValue("$quote", e.Pair.QuoteAsset);
             cmd.Parameters.AddWithValue("$interval", e.Interval);
             cmd.Parameters.AddWithValue("$source", e.Source);
+            cmd.Parameters.AddWithValue("$kind", e.Kind ?? (object)DBNull.Value);
             cmd.Parameters.AddWithValue("$side", e.Side);
             cmd.Parameters.AddWithValue("$time", e.Time);
             cmd.Parameters.AddWithValue("$confirmed", e.IsConfirmed ? 1 : 0);
             cmd.Parameters.AddWithValue("$price", ToText(e.Price));
             cmd.Parameters.AddWithValue("$stop", ToText(e.StopPrice));
+            cmd.Parameters.AddWithValue("$reference", ToText(e.ReferencePrice));
             cmd.Parameters.AddWithValue("$note", e.Note ?? (object)DBNull.Value);
             cmd.Parameters.AddWithValue("$aligned", e.TrendAligned is null ? DBNull.Value : e.TrendAligned.Value ? 1 : 0);
             cmd.Parameters.AddWithValue("$confluence", e.Confluence ?? (object)DBNull.Value);
@@ -226,7 +232,8 @@ public sealed class SignalStore : IDisposable
                 cmd.Parameters.AddWithValue("$interval", interval);
                 cmd.Parameters.AddWithValue("$cutoff", cutoff);
                 cmd.Parameters.AddWithValue("$limit", perIntervalLimit);
-                pending.AddRange(ReadAll(cmd));
+                // 历史数据里可能有锚定币行（规则上线前入库）：排除，避免无意义的K线拉取与统计污染
+                pending.AddRange(ReadAll(cmd).Where(e => !e.Pair.IsPegged));
             }
             return pending;
         }
@@ -237,9 +244,9 @@ public sealed class SignalStore : IDisposable
     // ---- 内部：建表 / 读写映射 / 旧格式导入 ----
 
     private const string SelectPrefix = """
-        SELECT id, market, base_asset, quote_asset, interval, source, side, signal_time, is_confirmed,
-               price, stop_price, note, trend_aligned, confluence, adx, atr_pct, bandwidth_pct,
-               origin, recorded_at,
+        SELECT id, market, base_asset, quote_asset, interval, source, kind, side, signal_time, is_confirmed,
+               price, stop_price, reference_price, note, trend_aligned, confluence, adx, atr_pct,
+               bandwidth_pct, origin, recorded_at,
                outcome_status, outcome_ret, outcome_excess, outcome_mfe, outcome_mae,
                outcome_stop_hit, outcome_net_positive, outcome_evaluated_at
         FROM signals
@@ -256,11 +263,13 @@ public sealed class SignalStore : IDisposable
                 quote_asset          TEXT    NOT NULL,
                 interval             TEXT    NOT NULL,
                 source               TEXT    NOT NULL,
+                kind                 TEXT,
                 side                 TEXT    NOT NULL,
                 signal_time          INTEGER NOT NULL,
                 is_confirmed         INTEGER NOT NULL CHECK (is_confirmed IN (0, 1)),
                 price                TEXT    NOT NULL,
                 stop_price           TEXT,
+                reference_price      TEXT,
                 note                 TEXT,
                 trend_aligned        INTEGER,
                 confluence           TEXT,
@@ -283,6 +292,38 @@ public sealed class SignalStore : IDisposable
             CREATE INDEX IF NOT EXISTS ix_signals_recorded ON signals (market, recorded_at);
             """;
         cmd.ExecuteNonQuery();
+        EnsureColumn("reference_price", "TEXT");
+        EnsureColumn("kind", "TEXT");
+        BackfillKindFromNote();
+    }
+
+    /// <summary>
+    /// 补全历史行的类别列：缠论信号的说明文本固定以 "[类别] " 开头（如 "[3买] MACD 面积背驰…"），
+    /// 早期入库的行没有独立类别列，按该前缀回填一次（幂等；非缠论来源不填）。
+    /// </summary>
+    private void BackfillKindFromNote()
+    {
+        using var cmd = _conn.CreateCommand();
+        cmd.CommandText = """
+            UPDATE signals SET kind = substr(note, 2, instr(note, ']') - 2)
+            WHERE kind IS NULL AND source = '缠论' AND note LIKE '[%]%';
+            """;
+        var updated = cmd.ExecuteNonQuery();
+        if (updated > 0) _logger.LogInformation("台账按说明文本回填类别列 {Count} 行", updated);
+    }
+
+    /// <summary>增量补列：已存在的库（旧版本建表）缺少新增列时补上，避免要求用户删库重建。</summary>
+    private void EnsureColumn(string name, string type)
+    {
+        using var check = _conn.CreateCommand();
+        check.CommandText =
+            "SELECT COUNT(*) FROM pragma_table_info('signals') WHERE name = $name;";
+        check.Parameters.AddWithValue("$name", name);
+        if (Convert.ToInt32(check.ExecuteScalar(), CultureInfo.InvariantCulture) > 0) return;
+        using var alter = _conn.CreateCommand();
+        alter.CommandText = $"ALTER TABLE signals ADD COLUMN {name} {type};";
+        alter.ExecuteNonQuery();
+        _logger.LogInformation("台账补齐新增列 {Column} {Type}", name, type);
     }
 
     private static IReadOnlyList<SignalEntry> ReadAll(SqliteCommand cmd)
@@ -298,32 +339,34 @@ public sealed class SignalStore : IDisposable
                 Pair = TradingPair.From(reader.GetString(2), reader.GetString(3)),
                 Interval = reader.GetString(4),
                 Source = reader.GetString(5),
-                Side = reader.GetString(6),
-                Time = reader.GetInt64(7),
-                IsConfirmed = reader.GetInt32(8) == 1,
-                Price = FromText(reader.GetString(9)) ?? 0m,
-                StopPrice = FromText(Text(reader, 10)),
-                Note = Text(reader, 11),
-                TrendAligned = reader.IsDBNull(12) ? null : reader.GetInt32(12) == 1,
-                Confluence = Text(reader, 13),
-                Adx = FromText(Text(reader, 14)),
-                AtrPct = FromText(Text(reader, 15)),
-                BandwidthPct = FromText(Text(reader, 16)),
-                Origin = reader.GetString(17),
-                RecordedAt = reader.GetInt64(18),
+                Kind = Text(reader, 6),
+                Side = reader.GetString(7),
+                Time = reader.GetInt64(8),
+                IsConfirmed = reader.GetInt32(9) == 1,
+                Price = FromText(reader.GetString(10)) ?? 0m,
+                StopPrice = FromText(Text(reader, 11)),
+                ReferencePrice = FromText(Text(reader, 12)),
+                Note = Text(reader, 13),
+                TrendAligned = reader.IsDBNull(14) ? null : reader.GetInt32(14) == 1,
+                Confluence = Text(reader, 15),
+                Adx = FromText(Text(reader, 16)),
+                AtrPct = FromText(Text(reader, 17)),
+                BandwidthPct = FromText(Text(reader, 18)),
+                Origin = reader.GetString(19),
+                RecordedAt = reader.GetInt64(20),
             };
-            if (!reader.IsDBNull(19))
+            if (!reader.IsDBNull(21))
             {
                 entry.Outcome = new SignalOutcome
                 {
-                    Status = reader.GetString(19),
-                    Ret = FromText(Text(reader, 20)),
-                    Excess = FromText(Text(reader, 21)),
-                    Mfe = FromText(Text(reader, 22)),
-                    Mae = FromText(Text(reader, 23)),
-                    StopHit = reader.IsDBNull(24) ? null : reader.GetInt32(24) == 1,
-                    NetPositive = reader.IsDBNull(25) ? null : reader.GetInt32(25) == 1,
-                    EvaluatedAt = reader.IsDBNull(26) ? null : reader.GetInt64(26),
+                    Status = reader.GetString(21),
+                    Ret = FromText(Text(reader, 22)),
+                    Excess = FromText(Text(reader, 23)),
+                    Mfe = FromText(Text(reader, 24)),
+                    Mae = FromText(Text(reader, 25)),
+                    StopHit = reader.IsDBNull(26) ? null : reader.GetInt32(26) == 1,
+                    NetPositive = reader.IsDBNull(27) ? null : reader.GetInt32(27) == 1,
+                    EvaluatedAt = reader.IsDBNull(28) ? null : reader.GetInt64(28),
                 };
             }
             list.Add(entry);
@@ -386,11 +429,13 @@ public sealed class SignalStore : IDisposable
                 Pair = pair,
                 Interval = legacy.Interval,
                 Source = legacy.Source,
+                Kind = legacy.Kind,
                 Side = legacy.Side,
                 Time = legacy.Time,
                 Price = legacy.Price,
                 Note = legacy.Note,
                 StopPrice = legacy.StopPrice,
+                ReferencePrice = legacy.ReferencePrice,
                 TrendAligned = legacy.TrendAligned,
                 Confluence = legacy.Confluence,
                 IsConfirmed = legacy.IsConfirmed,
@@ -425,11 +470,13 @@ public sealed class SignalStore : IDisposable
         [JsonPropertyName("symbol")] public string Symbol { get; set; } = "";
         [JsonPropertyName("interval")] public string Interval { get; set; } = "";
         [JsonPropertyName("source")] public string Source { get; set; } = "";
+        [JsonPropertyName("kind")] public string? Kind { get; set; }
         [JsonPropertyName("side")] public string Side { get; set; } = "";
         [JsonPropertyName("time")] public long Time { get; set; }
         [JsonPropertyName("price")] public decimal Price { get; set; }
         [JsonPropertyName("note")] public string? Note { get; set; }
         [JsonPropertyName("stopPrice")] public decimal? StopPrice { get; set; }
+        [JsonPropertyName("referencePrice")] public decimal? ReferencePrice { get; set; }
         [JsonPropertyName("trendAligned")] public bool? TrendAligned { get; set; }
         [JsonPropertyName("confluence")] public string? Confluence { get; set; }
         [JsonPropertyName("isConfirmed")] public bool IsConfirmed { get; set; }

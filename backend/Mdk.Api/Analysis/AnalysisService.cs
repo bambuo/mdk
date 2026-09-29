@@ -13,6 +13,11 @@ public sealed class AnalysisService(
     SignalStore store)
 {
     private static readonly TimeSpan HtfCacheTtl = TimeSpan.FromSeconds(60);
+    private static readonly TimeSpan CredibilityCacheTtl = TimeSpan.FromSeconds(60);
+
+    /// <summary>可信度表缓存（键 = 市场|周期）：台账只增不改，60s 内的统计不会影响使用判断。</summary>
+    private readonly ConcurrentDictionary<string, (IReadOnlyList<CredibilityBucket> Buckets, DateTimeOffset At)>
+        _credibilityCache = new();
 
     private readonly SignalOptions _signalOptions = signalOptions.Value;
     private readonly Chan.ChanOptions _chanOptions = chanOptions.Value;
@@ -93,12 +98,14 @@ public sealed class AnalysisService(
         var result = AnalysisEngine.Compute(market, pair, interval, candles, _signalOptions, htf, htfInterval,
             chanOptions, chanWindow, subLevel, subLevelInterval, lowerLevel, lowerLevelInterval);
         RecordSignals(market, pair, interval, result);
-        return result;
+        return result with { Credibility = GetCredibilityCached(market, interval) };
     }
 
     /// <summary>把本次分析产出的信号写入台账（自然键去重：同一信号只记一条）。</summary>
     private void RecordSignals(MarketKind market, TradingPair pair, string interval, AnalysisResult result)
     {
+        // 锚定币（USDC/USDT 等）价格恒定，其"信号"没有交易含义，不入台账以免污染绩效统计
+        if (pair.IsPegged) return;
         var now = DateTimeOffset.UtcNow.ToUnixTimeSeconds();
         foreach (var sig in result.Signals)
         {
@@ -108,11 +115,13 @@ public sealed class AnalysisService(
                 Pair = pair,
                 Interval = interval,
                 Source = sig.Source,
+                Kind = sig.Kind,
                 Side = sig.Side,
                 Time = sig.Time,
                 Price = sig.Price,
                 Note = sig.Note,
                 StopPrice = sig.StopPrice,
+                ReferencePrice = sig.ReferencePrice,
                 TrendAligned = sig.TrendAligned,
                 Confluence = sig.Confluence,
                 IsConfirmed = sig.IsConfirmed,
@@ -122,6 +131,40 @@ public sealed class AnalysisService(
                 RecordedAt = now,
             });
         }
+    }
+
+    /// <summary>
+    /// 可信度表（60s 缓存）：把台账里同市场同周期的样本按「来源 × 类别」分组，
+    /// 给出经验胜率与 Wilson 区间、扣费后为正比例、中位超额与典型风险单位。
+    /// 只做统计、不做筛选：样本不足的语境如实标记 <c>Sufficient=false</c>。
+    /// </summary>
+    private IReadOnlyList<CredibilityBucket> GetCredibilityCached(MarketKind market, string interval)
+    {
+        var key = $"{market}|{interval}";
+        if (_credibilityCache.TryGetValue(key, out var cached)
+            && DateTimeOffset.UtcNow - cached.At < CredibilityCacheTtl)
+        {
+            return cached.Buckets;
+        }
+
+        var pool = store.Snapshot()
+            .Where(e => e.Market == market
+                        && e.Interval == interval
+                        && !e.Pair.IsPegged
+                        && e.Outcome is { Status: "ok" })
+            // 同一信号可能先记「盘中预警」再记「收盘确认」：按信号本体去重，优先确认版本
+            .GroupBy(e => (e.Pair, e.Interval, e.Source, e.Kind, e.Side, e.Time))
+            .Select(g => g.FirstOrDefault(e => e.IsConfirmed) ?? g.First())
+            .ToList();
+
+        var buckets = pool
+            .GroupBy(e => (e.Source, e.Kind))
+            .Select(g => SignalCredibilityRules.Build(g.Key.Source, g.Key.Kind, interval, g.ToList()))
+            .OrderByDescending(b => b.NEpisodes)
+            .ToList();
+
+        _credibilityCache[key] = (buckets, DateTimeOffset.UtcNow);
+        return buckets;
     }
 
     /// <summary>次级别K线（覆盖显示窗口 + 预热），用于多级别结构叠加。</summary>

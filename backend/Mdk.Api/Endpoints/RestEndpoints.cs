@@ -54,7 +54,7 @@ internal static class RestEndpoints
                             var pair = pairs[t.Symbol];
                             return new SymbolQuote(
                                 t.Symbol, pair.BaseAsset, pair.QuoteAsset,
-                                t.LastPrice, t.PriceChangePercent, t.QuoteVolume);
+                                t.LastPrice, t.PriceChangePercent, t.QuoteVolume, pair.IsPegged);
                         })
                         .ToList();
                     return Results.Ok(rows);
@@ -147,6 +147,7 @@ internal static class RestEndpoints
                 var pool = store.Snapshot()
                     .Where(e => e.Market == marketKind
                                 && e.RecordedAt >= since
+                                && !e.Pair.IsPegged            // 锚定币价格恒定，其样本没有交易含义
                                 && e.Outcome is { Status: "ok" })
                     // 同一信号可能先以「盘中预警」、再以「收盘确认」各记一条：统计时按信号本体去重，
                     // 优先保留确认版本，避免样本量虚增（否则预警存活率与绩效都会被重复计数污染）

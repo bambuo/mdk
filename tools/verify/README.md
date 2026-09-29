@@ -12,6 +12,7 @@
 | `chan-usability.ts` | 可用性度量：信号频率、结构滞后（参考点→记账点）、入场滞后、止损距离、信号时 ADX | `bun tools/verify/chan-usability.ts` |
 | `signal-perf-audit.cjs` | 信号绩效严格检验：全部 vs 波次去重、分类别/周期/标的拆解、方向拆分 | `node tools/verify/signal-perf-audit.cjs` |
 | `signal-robustness.cjs` | 绩效稳健性：时间聚类（按日聚合）、去集中度（剔除最大标的）、分布与最差情形、近似样本外 | `node tools/verify/signal-robustness.cjs` |
+| `chan-gate-study.cjs` | **门控研究（预注册判据）**：13 个候选可交易性门控（入场已走 ≤xR、止损距离、ADX 体制、顺大势、类别、周期及组合）在"前 60% 选择 / 后 40% 验证"两段上分别检验，要求波次 ≥30、t ≥2、中位超额 >0、扣费后为正 ≥50%、集中度 ≤50%；无一通过即不启用任何过滤 | `bun tools/verify/chan-gate-study.cjs` |
 | `chan-ab-sublevel.cjs` | A/B 对照：次级别确认开关对缠论回填样本表现的影响 | `node tools/verify/chan-ab-sublevel.cjs` |
 | `chan-ab-confluence.cjs` | A/B 对照：级别共振标签（confluence）的表现——判据在跑数据前写定，未达标即结论"证据不足" | `node tools/verify/chan-ab-confluence.cjs` |
 | `chan-segment-audit.mjs` | 线段正确性独立核对：笔数（奇数≥3）/首尾相连与方向交替/终点是否为段内极值/破坏点独立复算（含缺口；尾部未确认段与扫描范围外标注为提醒） | `node tools/verify/chan-segment-audit.mjs BTCUSDT 1h` |

@@ -102,6 +102,11 @@ frontend/
 - **信号台账是 SQLite**（`backend/Mdk.Api/data/signals.db`，本地积累，不入库）：一行一条信号，标的拆成
   `base_asset` / `quote_asset` 两列，绩效列由后台服务在持有期满后回填；旧的 `signals.jsonl` 已在首次启动时
   导入并保留为备份，此后不再写入。小数在库里存定点文本（SQLite 无 decimal，存 REAL 会引回浮点误差）。
+- **信号可信度按证据呈现，不给未校准的"置信度"**：每个信号带经验徽章（同语境波次、胜率与 95% Wilson 区间、
+  扣费后为正、中位超额、典型止损距离），波次 <30 时显示"样本不足"。口径见 `Analysis/SignalCredibilityRules.cs`。
+- **门控只在通过预注册检验后启用**：`tools/verify/chan-gate-study.cjs` 用"前 60% 选择 / 后 40% 验证 + 波次去重"
+  检验候选过滤条件；当前 13 个候选**全部未通过**，因此不启用任何过滤，仅把入场质量（已走 x.xxR）与止损距离作为事实提示。
+- **锚定币（USDC/USDT 等）不是分析标的**：判定在领域层 `Domain/PeggedAssets.cs`，后端落库/自选/回填/统计与前端默认标的选择共用同一规则。
 - **小数一律用 `decimal`**（价格、指标、止损、盈亏），不用 `double`：交易所给的十进制字符串可原样接住，累加比较无二进制漂移。
   JSON 输出统一去掉标度与伪精度（八位小数 + 去尾随零，见 `Domain/DecimalJsonConverter.cs`，仅作用于序列化）；
   指标未定义的位次为 `null`（不再用 `NaN` 哨兵）。

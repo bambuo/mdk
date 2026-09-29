@@ -55,17 +55,26 @@ const marketOptions: { value: MarketKind; label: string }[] = [
 
 const intervals = ['15m', '30m', '1h', '4h', '1d', '1w']
 
-const toggleItems: { key: keyof Toggles; label: string }[] = [
-  { key: 'chan', label: '缠论' },
-  { key: 'segments', label: '线段' },
-  { key: 'multiLevel', label: '多级别' },
-  { key: 'signals', label: '信号' },
-  { key: 'ema', label: 'EMA' },
+/**
+ * 图层开关分两档：主开关（结构、信号）常显，其余收进「更多图层」——
+ * 常显项决定页面在讲什么，收起项是分析辅助，避免工具栏一行九个勾选框。
+ */
+const primaryItems: { key: keyof Toggles; label: string }[] = [
+  { key: 'chan', label: '缠论结构' },
+  { key: 'signals', label: '买卖信号' },
+]
+
+const secondaryItems: { key: keyof Toggles; label: string }[] = [
+  { key: 'segments', label: '线段（完整缠论）' },
+  { key: 'multiLevel', label: '多级别叠加' },
+  { key: 'levels', label: '支撑阻力点位' },
+  { key: 'ema', label: 'EMA 均线' },
   { key: 'rsi', label: 'RSI' },
   { key: 'macd', label: 'MACD' },
   { key: 'boll', label: 'BOLL' },
-  { key: 'levels', label: '点位' },
 ]
+
+const toggleItems = [...primaryItems, ...secondaryItems]
 
 const symbolOptions = computed(() =>
   props.symbols.map(s => ({
@@ -80,14 +89,25 @@ function filterOption(input: string, option: { label?: string }) {
   return label.toUpperCase().includes(input.trim().toUpperCase())
 }
 
-const enabledKeys = computed<string[]>({
-  get: () => toggleItems.filter(it => props.toggles[it.key]).map(it => it.key),
-  set: (keys: string[]) => {
-    const next = { ...props.toggles }
-    for (const it of toggleItems) next[it.key] = keys.includes(it.key)
-    emit('update:toggles', next)
-  },
+function toKeys(keys: string[]): keyof Toggles[] {
+  const next = { ...props.toggles }
+  for (const it of toggleItems) next[it.key] = keys.includes(it.key as keyof Toggles)
+  emit('update:toggles', next)
+  return keys as (keyof Toggles)[]
+}
+
+const primaryKeys = computed<string[]>({
+  get: () => primaryItems.filter(it => props.toggles[it.key]).map(it => it.key),
+  set: (keys) => void toKeys([...keys, ...secondaryKeys.value]),
 })
+
+const secondaryKeys = computed<string[]>({
+  get: () => secondaryItems.filter(it => props.toggles[it.key]).map(it => it.key),
+  set: (keys) => void toKeys([...primaryKeys.value, ...keys]),
+})
+
+/** 「更多图层」按钮上显示已启用的辅助图层数量，收起不等于关闭 */
+const secondaryCount = computed(() => secondaryKeys.value.length)
 
 const statusMeta = computed(() => {
   switch (props.socketStatus) {
@@ -152,9 +172,20 @@ const displayChangePct = computed(() => {
       <a-radio v-for="itv in intervals" :key="itv" :value="itv">{{ itv.toUpperCase() }}</a-radio>
     </a-radio-group>
 
-    <a-checkbox-group v-model="enabledKeys" class="toggles" size="small">
-      <a-checkbox v-for="item in toggleItems" :key="item.key" :value="item.key">{{ item.label }}</a-checkbox>
+    <a-checkbox-group v-model="primaryKeys" class="toggles" size="small">
+      <a-checkbox v-for="item in primaryItems" :key="item.key" :value="item.key">{{ item.label }}</a-checkbox>
     </a-checkbox-group>
+
+    <a-popover trigger="click" position="bl" :content-style="{ padding: '10px 12px' }">
+      <a-button size="mini" :type="secondaryCount ? 'secondary' : 'text'">
+        更多图层{{ secondaryCount ? ` · ${secondaryCount}` : '' }}
+      </a-button>
+      <template #content>
+        <a-checkbox-group v-model="secondaryKeys" direction="vertical" size="small">
+          <a-checkbox v-for="item in secondaryItems" :key="item.key" :value="item.key">{{ item.label }}</a-checkbox>
+        </a-checkbox-group>
+      </template>
+    </a-popover>
 
     <div class="spacer" />
 

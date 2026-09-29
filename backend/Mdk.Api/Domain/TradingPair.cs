@@ -49,6 +49,9 @@ public readonly record struct TradingPair : IComparable<TradingPair>
     /// <summary>展示格式：BTC/USDT。</summary>
     public string Display => $"{BaseAsset}/{QuoteAsset}";
 
+    /// <summary>交易币是否为锚定币（见 <see cref="PeggedAssets"/>）：锚定币不构成分析标的。</summary>
+    public bool IsPegged => PeggedAssets.IsPegged(BaseAsset);
+
     /// <summary>由拆分后的交易币与计价币构造，两个入参均会做大写与字符合法性归一。</summary>
     public static TradingPair From(string baseAsset, string quoteAsset) =>
         new(Normalize(baseAsset, nameof(baseAsset)), Normalize(quoteAsset, nameof(quoteAsset)));

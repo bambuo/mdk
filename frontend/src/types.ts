@@ -28,6 +28,27 @@ export interface SymbolQuote {
   lastPrice: number
   priceChangePercent: number
   quoteVolume: number
+  /** 锚定币（稳定币/法币）：价格恒定，不作默认分析标的。规则由后端领域层给出（Domain/PeggedAssets.cs） */
+  pegged: boolean
+}
+
+/** 台账里同语境（来源 × 类别 × 周期）的经验表现——界面徽章只陈述证据，不给"置信度分数" */
+export interface CredibilityBucket {
+  source: string
+  kind: string | null
+  interval: string
+  /** 原始样本数 */
+  n: number
+  /** 独立波次（统计显著性的有效样本量） */
+  nEpisodes: number
+  /** 波次是否达到可给出胜率的最低要求（不足时界面必须显示"样本不足"） */
+  sufficient: boolean
+  winRate: number
+  winRateLow: number
+  winRateHigh: number
+  netPositiveRate: number
+  medianExcess: number
+  medianRiskPct: number
 }
 
 export interface TrendResult {
@@ -60,6 +81,16 @@ export interface TradeSignal {
   bandwidthPct: number | null
   /** 级别共振标签：aligned=窗口内有同向高周期缠论信号；counter=只有反向；none=无（仅缠论信号有值） */
   confluence: 'aligned' | 'counter' | 'none' | null
+  /** 买卖点类别（"3买"…）；非缠论信号为 null */
+  kind?: string | null
+  /** 结构参考价（买卖点所依据的极值/中枢沿）：用于判断入场是否已经追高 */
+  referencePrice?: number | null
+  /** 风险单位：入场到结构失效位的距离占入场价比例（信号间可比的 1R） */
+  riskPct?: number | null
+  /** 入场滞后：记账价相对结构参考价的偏离占入场价比例 */
+  entryLagPct?: number | null
+  /** 滞后占比 = 入场滞后 ÷ 风险单位：接近 1 表示确认成本已吃掉一个风险单位 */
+  lagShare?: number | null
 }
 
 export interface MacdSeries {
@@ -140,6 +171,8 @@ export interface AnalysisResult {
   macd: MacdSeries
   chan: ChanSummary | null
   chanLevels: ChanLevelStructure[] | null
+  /** 可信度表（按 来源 × 类别 分组）：界面据此给每个信号显示经验表现徽章 */
+  credibility?: CredibilityBucket[] | null
 }
 
 /** 图表指标显示开关 */

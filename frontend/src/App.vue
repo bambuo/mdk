@@ -6,7 +6,6 @@ import { useKlineSocket } from './composables/useKlineSocket'
 import AnalysisPanel from './components/AnalysisPanel.vue'
 import ChartPanel from './components/ChartPanel.vue'
 import TopToolbar from './components/TopToolbar.vue'
-import { isPeggedPair } from './utils'
 import type { AnalysisResult, Candle, MarketKind, SignalStatsResponse, SymbolQuote, Toggles } from './types'
 
 const symbols = ref<SymbolQuote[]>([])
@@ -87,7 +86,7 @@ const chartRef = ref<InstanceType<typeof ChartPanel> | null>(null)
  * 榜单按成交额排序，锚定币常年居首，直接取第一条会得到一条几乎静止的价格线。
  */
 function pickDefaultSymbol(list: SymbolQuote[]): string {
-  const tradable = list.filter(s => !isPeggedPair(s.baseAsset))
+  const tradable = list.filter(s => !s.pegged)
   const pool = tradable.length > 0 ? tradable : list
   const btc = pool.find(s => s.baseAsset === 'BTC')
   return btc?.symbol ?? pool[0]?.symbol ?? 'BTCUSDT'

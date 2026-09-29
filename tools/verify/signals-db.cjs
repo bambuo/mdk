@@ -15,6 +15,11 @@ function num(value) {
   return value === null || value === undefined || value === '' ? null : Number(value)
 }
 
+function ratio(numerator, denominator) {
+  if (numerator === null || !denominator) return null
+  return numerator / denominator
+}
+
 function bool(value) {
   return value === null || value === undefined ? null : value === 1
 }
@@ -28,8 +33,8 @@ function load(dbPath) {
   try {
     return db.query(`
       SELECT market, base_asset, quote_asset, interval, source, side, signal_time AS time,
-             is_confirmed, price, stop_price, note, trend_aligned, confluence, adx, atr_pct,
-             bandwidth_pct, origin, recorded_at,
+             is_confirmed, price, stop_price, reference_price, note, trend_aligned, confluence, adx,
+             atr_pct, bandwidth_pct, origin, recorded_at,
              outcome_status, outcome_ret, outcome_excess, outcome_mfe, outcome_mae,
              outcome_stop_hit, outcome_net_positive, outcome_evaluated_at
       FROM signals
@@ -47,6 +52,10 @@ function load(dbPath) {
       isConfirmed: row.is_confirmed === 1,
       price: num(row.price),
       stopPrice: num(row.stop_price),
+      referencePrice: num(row.reference_price),
+      // 风险口径（与后端 TradeSignal 的 RiskPct / EntryLagPct / LagShare 同定义）
+      riskPct: ratio(num(row.stop_price) === null ? null : Math.abs(num(row.price) - num(row.stop_price)), num(row.price)),
+      entryLagPct: ratio(num(row.reference_price) === null ? null : Math.abs(num(row.price) - num(row.reference_price)), num(row.price)),
       note: row.note,
       trendAligned: bool(row.trend_aligned),
       confluence: row.confluence,
@@ -55,6 +64,11 @@ function load(dbPath) {
       bandwidthPct: num(row.bandwidth_pct),
       origin: row.origin,
       recordedAt: row.recorded_at,
+      get lagShare() {
+        return this.riskPct && this.riskPct > 0 && this.entryLagPct !== null
+          ? this.entryLagPct / this.riskPct
+          : null
+      },
       outcome: row.outcome_status === null ? null : {
         status: row.outcome_status,
         ret: num(row.outcome_ret),

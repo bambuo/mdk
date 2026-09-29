@@ -28,7 +28,25 @@ public sealed record TradeSignal(
     decimal? AtrPct = null,
     decimal? BandwidthPct = null,
     /// <summary>级别共振标签：aligned=窗口内有同向高周期缠论信号，counter=只有反向，none=无（仅缠论信号有值）。</summary>
-    string? Confluence = null);
+    string? Confluence = null,
+    /// <summary>结构参考价：买卖点所依据的极值/中枢沿（仅缠论信号有值，用于衡量"入场是否已经追高"）。</summary>
+    decimal? ReferencePrice = null,
+    /// <summary>买卖点类别（"1买"/"2买"/"3买"/"1卖"/"2卖"/"3卖"）；非缠论信号为 null。</summary>
+    string? Kind = null)
+{
+    /// <summary>风险单位：入场到结构失效位（止损）的距离，占入场价比例。信号间可比的"1R"。</summary>
+    public decimal? RiskPct => StopPrice is { } stop && Price != 0 ? Math.Abs(Price - stop) / Price : null;
+
+    /// <summary>入场滞后：记账价相对结构参考价的偏离，占入场价比例（越大表示确认成本越高）。</summary>
+    public decimal? EntryLagPct =>
+        ReferencePrice is { } reference && Price != 0 ? Math.Abs(Price - reference) / Price : null;
+
+    /// <summary>
+    /// 滞后占比 = 入场滞后 ÷ 风险单位：衡量"该笔已完成的部分吃掉了多少风险额度"。
+    /// 接近或超过 1 表示入场时价格已走完一个风险单位的距离（追高/追低，结构失效位离现价过近）。
+    /// </summary>
+    public decimal? LagShare => RiskPct is { } risk && risk > 0 && EntryLagPct is { } lag ? lag / risk : null;
+}
 
 /// <summary>信号发生时的市场状态快照。</summary>
 public readonly record struct SignalRegime(decimal? Adx, decimal? AtrPct, decimal? BandwidthPct);
@@ -112,7 +130,12 @@ public sealed record AnalysisResult(
     MacdSeries Macd,
     ChanSummary? Chan = null,
     /// <summary>多级别结构（高周期 / 本级别 / 次级别）；无对应数据时该级别缺省。</summary>
-    IReadOnlyList<ChanLevelStructure>? ChanLevels = null);
+    IReadOnlyList<ChanLevelStructure>? ChanLevels = null,
+    /// <summary>
+    /// 可信度表：按「来源 × 类别 × 周期」给出该语境在台账里的经验统计（样本量/胜率与区间/扣费后为正）。
+    /// 前端按 (source, kind, interval) 查表给每个信号显示徽章；样本不足时只显示"样本不足"。
+    /// </summary>
+    IReadOnlyList<CredibilityBucket>? Credibility = null);
 
 public sealed record KlinesResponse(
     string Market,
@@ -128,6 +151,8 @@ public sealed record SymbolQuote(
     string QuoteAsset,
     decimal LastPrice,
     decimal PriceChangePercent,
-    decimal QuoteVolume);
+    decimal QuoteVolume,
+    /// <summary>锚定币（稳定币/法币）：价格恒定，不应作默认分析标的，也不计入绩效统计。</summary>
+    bool Pegged);
 
 public sealed record Ticker24h(string Symbol, decimal LastPrice, decimal PriceChangePercent, decimal QuoteVolume);

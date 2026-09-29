@@ -115,6 +115,12 @@ public sealed class SignalBackfillService(
                         completed++;
                         continue;
                     }
+                    if (pair.Value.IsPegged)
+                    {
+                        logger.LogInformation("回填跳过锚定币 {Symbol}（价格恒定，不构成分析标的）", pair.Value.Display);
+                        completed++;
+                        continue;
+                    }
                     _status = _status with { Current = $"{pair.Value.Symbol} {interval}", Completed = completed };
                     try
                     {
@@ -201,11 +207,13 @@ public sealed class SignalBackfillService(
                 Pair = pair,
                 Interval = interval,
                 Source = "缠论",
+                Kind = s.Kind,
                 Side = s.Side,
                 Time = s.Time,
                 Price = s.Price,
                 Note = $"[{s.Kind}] {s.Note}",
                 StopPrice = s.StopPrice,
+                ReferencePrice = s.ReferencePrice,
                 TrendAligned = s.TrendAligned,
                 Confluence = s.Confluence,
                 IsConfirmed = true,

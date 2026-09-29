@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, ref } from 'vue'
-import type { AnalysisResult, SignalStatsResponse } from '../types'
+import type { AnalysisResult, CredibilityBucket, SignalStatsResponse, TradeSignal } from '../types'
 import { formatPct, formatPrice, formatTime, formatTimeFull } from '../utils'
 
 const props = defineProps<{
@@ -100,6 +100,47 @@ const alignmentStats = computed(() => props.stats?.byAlignment ?? [])
 const regimeStats = computed(() => props.stats?.byRegime ?? [])
 
 const previewCount = computed(() => props.analysis?.signals.filter(s => !s.isConfirmed).length ?? 0)
+
+/**
+ * 可信度徽章：按 (来源, 类别) 到台账经验表里查同语境的**实际表现**，
+ * 不做加权、不给"置信度分数"——只陈述样本量、胜率区间与扣费后为正比例；
+ * 波次不足时明确显示"样本不足"（口径见后端 SignalCredibilityRules）。
+ */
+const credibilityMap = computed(() => {
+  const map = new Map<string, CredibilityBucket>()
+  for (const bucket of props.analysis?.credibility ?? []) {
+    map.set(`${bucket.source}|${bucket.kind ?? ''}`, bucket)
+  }
+  return map
+})
+
+function bucketOf(sig: TradeSignal): CredibilityBucket | null {
+  return credibilityMap.value.get(`${sig.source}|${sig.kind ?? ''}`) ?? null
+}
+
+function credibilityText(sig: TradeSignal): string {
+  const bucket = bucketOf(sig)
+  if (!bucket) return '无历史样本'
+  if (!bucket.sufficient) return `样本不足 · ${bucket.nEpisodes}波`
+  const halfWidth = Math.round((bucket.winRateHigh - bucket.winRateLow) * 50)
+  return `证据 ${Math.round(bucket.winRate * 100)}%±${halfWidth} · ${bucket.nEpisodes}波`
+}
+
+function credibilityClass(sig: TradeSignal): string {
+  const bucket = bucketOf(sig)
+  if (!bucket || !bucket.sufficient) return 'unknown'
+  if (bucket.netPositiveRate >= 0.5) return 'good'
+  return bucket.netPositiveRate >= 0.42 ? 'mid' : 'weak'
+}
+
+/** 已走 R 数：入场相对结构参考点已完成的幅度 ÷ 该信号的止损距离（1R） */
+function lagText(sig: TradeSignal): string | null {
+  return sig.lagShare == null ? null : `已走 ${sig.lagShare.toFixed(2)}R`
+}
+
+function lagClass(share: number): string {
+  return share >= 1 ? 'weak' : share >= 0.75 ? 'mid' : 'good'
+}
 
 /** 状态/共振分组的简写标签（"震荡市 ADX<20" → "震荡"） */
 function shortLabel(label: string) {
@@ -344,28 +385,51 @@ function sideColor(side: string) {
           :key="`${sig.time}-${sig.source}-${sig.isConfirmed}`"
           :dot-color="sig.isConfirmed ? sideColor(sig.side) : '#f0b90b'"
         >
-          <div class="signal-row" @click="emit('locate', sig.price)">
+          <div class="signal-row" :title="sig.note" @click="emit('locate', sig.price)">
             <div class="signal-head">
               <span class="side" :class="sig.side">{{ sig.side === 'buy' ? '买' : '卖' }}</span>
-              <span class="src-name">{{ sig.source }}</span>
+              <span class="src-name">{{ sig.kind ? `${sig.source} ${sig.kind}` : sig.source }}</span>
               <span v-if="!sig.isConfirmed" class="preview-badge">盘中</span>
               <span v-if="confluenceLabel(sig.confluence)" class="conf-badge" :class="sig.confluence">
                 {{ confluenceLabel(sig.confluence) }}
               </span>
               <span class="signal-time" :title="formatTimeFull(sig.time)">{{ formatTime(sig.time) }}</span>
               <span class="signal-price" :class="sig.side">{{ formatPrice(sig.price) }}</span>
+              <span class="head-spacer" />
+              <a-tooltip position="left">
+                <span class="cred-badge" :class="credibilityClass(sig)">{{ credibilityText(sig) }}</span>
+                <template #content>
+                  <div class="cred-tip">
+                    <div class="cred-tip-title">
+                      同语境历史表现（{{ sig.source }}<template v-if="sig.kind"> {{ sig.kind }}</template>
+                      · {{ analysis.interval }}）
+                    </div>
+                    <template v-if="bucketOf(sig)">
+                      <div>独立波次 {{ bucketOf(sig)!.nEpisodes }}（原始 {{ bucketOf(sig)!.n }} 条）</div>
+                      <div>
+                        胜率 {{ Math.round(bucketOf(sig)!.winRate * 100) }}%（95% 区间
+                        {{ Math.round(bucketOf(sig)!.winRateLow * 100) }}–{{ Math.round(bucketOf(sig)!.winRateHigh * 100) }}%）
+                      </div>
+                      <div>扣费后为正 {{ Math.round(bucketOf(sig)!.netPositiveRate * 100) }}%</div>
+                      <div>中位超额 {{ (bucketOf(sig)!.medianExcess * 100).toFixed(2) }}%</div>
+                      <div>典型止损距离 {{ (bucketOf(sig)!.medianRiskPct * 100).toFixed(2) }}%</div>
+                    </template>
+                    <div v-else>该语境暂无已评估样本</div>
+                    <div class="cred-tip-foot">口径：波次去重 · 扣费后 · 仅供判断证据强度，不构成交易建议</div>
+                  </div>
+                </template>
+              </a-tooltip>
             </div>
             <div class="signal-meta">
               <span :class="sig.isConfirmed ? 'ok' : 'warn'">{{ sig.isConfirmed ? '已确认' : '未确认' }}</span>
-              <span v-if="sig.adx != null" :class="regimeClass(sig.adx)">
-                {{ sig.adx >= 25 ? '趋势' : sig.adx < 20 ? '震荡' : '过渡' }} ADX{{ sig.adx.toFixed(0) }}
-              </span>
-              <span v-if="sig.atrPct != null">波动 {{ (sig.atrPct * 100).toFixed(2) }}%</span>
               <span v-if="sig.trendAligned != null">{{ sig.trendAligned ? '顺大势' : '逆大势' }}</span>
-            </div>
-            <div class="signal-note">{{ sig.note }}</div>
-            <div v-if="sig.stopPrice != null" class="signal-stop">
-              止损参考 {{ formatPrice(sig.stopPrice) }}（2×ATR）
+              <span v-if="sig.adx != null" :class="regimeClass(sig.adx)">ADX{{ sig.adx.toFixed(0) }}</span>
+              <span v-if="sig.stopPrice != null">
+                止损 {{ formatPrice(sig.stopPrice) }}<template v-if="sig.riskPct != null">（{{ (sig.riskPct * 100).toFixed(2) }}%）</template>
+              </span>
+              <span v-if="lagText(sig)" :class="lagClass(sig.lagShare!)" title="入场相对结构参考点已完成的幅度 ÷ 该信号的止损距离（1R）">
+                {{ lagText(sig) }}
+              </span>
             </div>
           </div>
         </a-timeline-item>
@@ -1038,6 +1102,62 @@ function sideColor(side: string) {
   font-size: 12px;
   color: #6b7280;
   padding: 4px 6px;
+}
+
+.cred-badge {
+  flex: 0 0 auto;
+  margin-left: 8px;
+  padding: 0 6px;
+  border-radius: 3px;
+  font-size: 11px;
+  line-height: 16px;
+  border: 1px solid var(--color-border-2);
+  color: var(--color-text-3);
+  white-space: nowrap;
+}
+
+.cred-badge.good {
+  border-color: rgba(0, 180, 42, 0.45);
+  color: rgb(var(--green-6));
+}
+
+.cred-badge.mid {
+  border-color: rgba(255, 170, 0, 0.45);
+  color: rgb(var(--orange-6));
+}
+
+.cred-badge.weak {
+  border-color: rgba(245, 63, 63, 0.4);
+  color: rgb(var(--red-6));
+}
+
+.cred-badge.unknown {
+  border-style: dashed;
+}
+
+.head-spacer {
+  flex: 1 1 auto;
+}
+
+.cred-tip {
+  font-size: 12px;
+  line-height: 18px;
+}
+
+.cred-tip-title {
+  font-weight: 600;
+  margin-bottom: 4px;
+}
+
+.cred-tip-foot {
+  margin-top: 4px;
+  color: var(--color-text-3);
+}
+
+.signal-meta .lag.good,
+.signal-meta .lag.mid,
+.signal-meta .lag.weak {
+  font-weight: 600;
 }
 
 .signal-row {

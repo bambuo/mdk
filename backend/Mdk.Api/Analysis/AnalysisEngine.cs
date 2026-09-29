@@ -126,7 +126,9 @@ public static class AnalysisEngine
                     Adx: regime.Adx,
                     AtrPct: regime.AtrPct,
                     BandwidthPct: regime.BandwidthPct,
-                    Confluence: confluenceTags.GetValueOrDefault((p.Time, p.Side)));
+                    Confluence: confluenceTags.GetValueOrDefault((p.Time, p.Side)),
+                    ReferencePrice: p.ReferencePrice,
+                    Kind: p.Kind);
             }).ToList();
         var allSignals = chanSignals.Count == 0 ? signals : [.. signals, .. chanSignals];
 

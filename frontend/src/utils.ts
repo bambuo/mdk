@@ -51,20 +51,6 @@ export function formatTimeFull(sec: number): string {
   return `${yyyy}-${formatTime(sec)}`
 }
 
-/** 稳定币/锚定币（价格恒定在 1 附近，K线图几乎不动，不适合作为默认图表标的） */
-const PEGGED_BASES = new Set([
-  'USDC', 'FDUSD', 'TUSD', 'USDP', 'BUSD', 'DAI', 'USD1', 'USDE', 'USDS', 'XUSD', 'USDY',
-  'EUR', 'EURI', 'AEUR', 'GBP', 'TRY', 'BRL', 'ARS', 'JPY', 'AUD',
-])
-
-/** 是否为锚定币（如 USDC/USDT、FDUSD/USDT —— 价格恒定在 1 附近，K线图几乎不动，不适合作为默认图表标的） */
-export function isPeggedPair(baseAsset: string): boolean {
-  const base = baseAsset.toUpperCase()
-  if (PEGGED_BASES.has(base)) return true
-  // 形如 USDx 的包装稳定币
-  return base.startsWith('USD') && (base.length === 4 || /^USD\d/.test(base))
-}
-
 /** 周期 → 秒数（用于判断实时K线数据是否出现断层） */
 export function intervalSeconds(interval: string): number {
   const match = /^(\d+)([mhdw])$/.exec(interval)

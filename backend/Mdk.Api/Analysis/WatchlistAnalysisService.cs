@@ -41,6 +41,8 @@ public sealed class WatchlistAnalysisService(
             foreach (var (market, pair, itv) in analysisService.RecentRequests(_options.WatchlistMaxTriples))
             {
                 if (stoppingToken.IsCancellationRequested) break;
+                if (pair.IsPegged) continue;   // 锚定币不构成分析标的
+
                 try
                 {
                     await analysisService.AnalyzeAsync(market, pair, itv, 500, stoppingToken);
