@@ -1,6 +1,6 @@
-const fs = require('fs')
-const rows = fs.readFileSync('/Users/johana/Desktop/mdk/backend/Mdk.Api/data/signals.jsonl','utf8').trim().split('\n')
-  .map(l=>JSON.parse(l)).filter(r=>r.source==='缠论'&&r.outcome&&r.outcome.status==='ok')
+// 数据来源：SQLite 台账（见 signals-db.cjs）
+const rows = require('./signals-db.cjs').load()
+  .filter(r=>r.source==='缠论'&&r.outcome&&r.outcome.status==='ok')
 const mean=a=>a.reduce((x,y)=>x+y,0)/a.length
 const std=a=>{const m=mean(a);return Math.sqrt(mean(a.map(v=>(v-m)**2)))}
 const t=a=>a.length>1?mean(a)/(std(a)/Math.sqrt(a.length)):NaN

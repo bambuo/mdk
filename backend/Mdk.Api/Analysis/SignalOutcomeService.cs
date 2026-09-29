@@ -10,12 +10,15 @@ namespace Mdk.Api.Analysis;
 /// 这是把「置信度」从启发式分数变成可验证统计量的基础。
 /// </summary>
 public sealed class SignalOutcomeService(
-    SignalJournal journal,
+    SignalStore store,
     BinanceRestClient rest,
     IOptions<SignalOptions> signalOptions,
     ILogger<SignalOutcomeService> logger) : BackgroundService
 {
     private static readonly TimeSpan ScanInterval = TimeSpan.FromSeconds(60);
+
+    /// <summary>单周期每轮最多评估的待回填条数（避免一次拉取过大区间）。</summary>
+    private const int MaxPerInterval = 500;
 
     private readonly SignalOptions _options = signalOptions.Value;
 
@@ -51,17 +54,15 @@ public sealed class SignalOutcomeService(
     internal async Task ScanOnceAsync(CancellationToken ct)
     {
         var now = DateTimeOffset.UtcNow.ToUnixTimeSeconds();
-        var pending = journal.Snapshot()
-            .Where(e => e.Outcome is null && now >= e.Time + MarketIntervals.IntervalSeconds(e.Interval) * _options.OutcomeHorizonBars)
-            .GroupBy(e => (e.Market, e.Symbol, e.Interval))
+        // 待评估集合由台账按"各周期持有期已满"筛选（SQL 侧完成），每周期最多取 MaxPerInterval 条
+        var pending = store.PendingOutcomes(now, _options.OutcomeHorizonBars, MaxPerInterval)
+            .GroupBy(e => (e.Market, e.Pair, e.Interval))
             .ToList();
 
         foreach (var group in pending)
         {
             ct.ThrowIfCancellationRequested();
-            var (marketStr, symbol, interval) = group.Key;
-            if (!MarketKindExtensions.TryParse(marketStr, out var market)) continue;
-            if (!TradingPair.TryParse(symbol, out var pair)) continue;
+            var (market, pair, interval) = group.Key;
 
             // 按该组待评估信号的**时间范围**取K线（而非固定取最近 1000 根）：
             // 历史回填样本可能早于最近 1000 根，用固定窗口会被误判为 expired。
@@ -76,7 +77,7 @@ public sealed class SignalOutcomeService(
             }
             catch (BinanceException ex)
             {
-                logger.LogWarning("绩效评估拉取K线失败 {Symbol} {Interval}: {Message}", symbol, interval, ex.Message);
+                logger.LogWarning("绩效评估拉取K线失败 {Symbol} {Interval}: {Message}", pair.Symbol, interval, ex.Message);
                 continue;
             }
             if (candles.Length == 0) continue;
@@ -90,7 +91,7 @@ public sealed class SignalOutcomeService(
                 if (idx < 0)
                 {
                     // 信号过旧，超出可取K线范围
-                    journal.MarkOutcome(entry.Key, new SignalOutcome { Status = "expired", EvaluatedAt = now });
+                    store.MarkOutcome(entry.Id, new SignalOutcome { Status = "expired", EvaluatedAt = now });
                     continue;
                 }
                 if (idx + horizon >= candles.Length) continue; // 持有期未满，留待下轮
@@ -122,7 +123,7 @@ public sealed class SignalOutcomeService(
                 }
 
                 var feeRt = market == MarketKind.Futures ? 0.001m : 0.002m;
-                journal.MarkOutcome(entry.Key, new SignalOutcome
+                store.MarkOutcome(entry.Id, new SignalOutcome
                 {
                     Status = "ok",
                     Ret = ret,

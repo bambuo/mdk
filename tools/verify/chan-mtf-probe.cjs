@@ -3,9 +3,9 @@
 // ② 多周期信号共振：本级别信号之前 K 根高周期K线内是否出现同向高周期缠论信号
 // ③ 市场状态（ADX）
 // ④ 组合（共振 + 顺高周期）
-const fs = require('fs')
-const rows = fs.readFileSync('/Users/johana/Desktop/mdk/backend/Mdk.Api/data/signals.jsonl', 'utf8')
-  .trim().split('\n').map(l => JSON.parse(l)).filter(r => r.outcome && r.outcome.status === 'ok')
+// 数据来源：SQLite 台账（见 signals-db.cjs）
+const rows = require('./signals-db.cjs').load()
+  .filter(r => r.outcome && r.outcome.status === 'ok')
 
 const mean = a => a.length ? a.reduce((x, y) => x + y, 0) / a.length : NaN
 const std = a => { const m = mean(a); return Math.sqrt(mean(a.map(v => (v - m) ** 2))) }

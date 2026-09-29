@@ -10,7 +10,7 @@ public sealed class AnalysisService(
     BinanceRestClient rest,
     IOptions<SignalOptions> signalOptions,
     IOptions<Chan.ChanOptions> chanOptions,
-    SignalJournal journal)
+    SignalStore store)
 {
     private static readonly TimeSpan HtfCacheTtl = TimeSpan.FromSeconds(60);
 
@@ -96,18 +96,16 @@ public sealed class AnalysisService(
         return result;
     }
 
-    /// <summary>把本次分析产出的信号写入绩效日志（键去重：同一信号只记一次）。</summary>
+    /// <summary>把本次分析产出的信号写入台账（自然键去重：同一信号只记一条）。</summary>
     private void RecordSignals(MarketKind market, TradingPair pair, string interval, AnalysisResult result)
     {
-        var marketKey = market.ToString().ToLowerInvariant();
         var now = DateTimeOffset.UtcNow.ToUnixTimeSeconds();
         foreach (var sig in result.Signals)
         {
-            journal.TryRecord(new SignalJournalEntry
+            store.TryRecord(new SignalEntry
             {
-                Key = $"{marketKey}|{pair.Symbol}|{interval}|{sig.Source}|{sig.Side}|{sig.Time}|{(sig.IsConfirmed ? 1 : 0)}",
-                Market = marketKey,
-                Symbol = pair.Symbol,
+                Market = market,
+                Pair = pair,
                 Interval = interval,
                 Source = sig.Source,
                 Side = sig.Side,

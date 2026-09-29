@@ -47,7 +47,7 @@ public sealed record BackfillStatus(
 public sealed class SignalBackfillService(
     BinanceRestClient rest,
     SymbolCatalog catalog,
-    SignalJournal journal,
+    SignalStore store,
     IOptions<BackfillOptions> backfillOptions,
     IOptions<ChanOptions> chanOptions,
     ILogger<SignalBackfillService> logger) : BackgroundService
@@ -186,22 +186,19 @@ public sealed class SignalBackfillService(
         }
 
         var seedFrom = now - days * 86400L;
-        // A/B 对照：可关闭次级别确认（Origin 与键后缀区分，互不覆盖）
+        // A/B 对照：可关闭次级别确认（origin 参与台账去重，两组样本互不覆盖）
         var options = subLevelConfirm ? _chanOptions : _chanOptions.Clone(requireSubLevelConfirm: false);
         var origin = subLevelConfirm ? "backfill" : "backfill-nosub";
-        var keySuffix = subLevelConfirm ? "|bf" : "|bfn";
         var signals = ChanBackfill.Replay(main, sub, subInterval, htf, htfInterval, options, seedFrom, toSec);
 
         var inserted = 0L;
         var recordedAt = DateTimeOffset.UtcNow.ToUnixTimeSeconds();
         foreach (var s in signals)
         {
-            var key = $"spot|{pair.Symbol}|{interval}|缠论|{s.Side}|{s.Time}|1{keySuffix}";
-            if (journal.TryRecord(new SignalJournalEntry
+            if (store.TryRecord(new SignalEntry
             {
-                Key = key,
-                Market = "spot",
-                Symbol = pair.Symbol,
+                Market = MarketKind.Spot,
+                Pair = pair,
                 Interval = interval,
                 Source = "缠论",
                 Side = s.Side,

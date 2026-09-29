@@ -1,7 +1,6 @@
 // 缠论绩效的严格检验：显著性 / 波次口径 / 分类别与分标的拆解 / 与同期基线对比
-const fs = require('fs')
-const rows = fs.readFileSync('/Users/johana/Desktop/mdk/backend/Mdk.Api/data/signals.jsonl', 'utf8')
-  .trim().split('\n').map(l => JSON.parse(l))
+// 数据来源：SQLite 台账（见 signals-db.cjs）
+const rows = require('./signals-db.cjs').load()
   .filter(r => r.source === '缠论' && r.outcome && r.outcome.status === 'ok')
 
 const mean = a => a.reduce((x, y) => x + y, 0) / a.length

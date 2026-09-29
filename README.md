@@ -91,11 +91,17 @@ frontend/
 `./tools/verify/run-all.sh`（需后端在 :5099 运行）一键跑 8 项独立校验：结构与信号一致性、中枢几何独立复算、
 跨显示窗口可复现性、无未来函数（截断对照）、线段正确性核对、可用性度量、绩效严格检验、绩效稳健性。
 
+绩效类脚本直接读信号台账 `backend/Mdk.Api/data/signals.db`（SQLite，见 `tools/verify/signals-db.cjs`）。
+全部脚本用 `bun` 运行（`bun:sqlite` 为内置模块，无需额外依赖）。
+
 ## 备注
 
 - K线时间轴按 UTC+8 显示。
 - 目录只收录状态为 `TRADING` 的交易对：现货已停牌（`BREAK`）的币种（如改名为 Heima 的 LIT 现货）不会出现；同名合约仍在时可切到「合约」市场查看。
 - RSI/ATR/ADX 均为 Wilder 平滑（α=1/N），与 TradingView 的 RMA 一致；与 `span=N` 的 EMA 不是一回事。
+- **信号台账是 SQLite**（`backend/Mdk.Api/data/signals.db`，本地积累，不入库）：一行一条信号，标的拆成
+  `base_asset` / `quote_asset` 两列，绩效列由后台服务在持有期满后回填；旧的 `signals.jsonl` 已在首次启动时
+  导入并保留为备份，此后不再写入。小数在库里存定点文本（SQLite 无 decimal，存 REAL 会引回浮点误差）。
 - **小数一律用 `decimal`**（价格、指标、止损、盈亏），不用 `double`：交易所给的十进制字符串可原样接住，累加比较无二进制漂移。
   JSON 输出统一去掉标度与伪精度（八位小数 + 去尾随零，见 `Domain/DecimalJsonConverter.cs`，仅作用于序列化）；
   指标未定义的位次为 `null`（不再用 `NaN` 哨兵）。

@@ -11,11 +11,11 @@ namespace Mdk.Api.Analysis;
 /// </summary>
 public static class SignalQualityRules
 {
-    public static (string Grade, string Reason, decimal TopSymbolShare) Evaluate(IReadOnlyList<SignalJournalEntry> items)
+    public static (string Grade, string Reason, decimal TopSymbolShare) Evaluate(IReadOnlyList<SignalEntry> items)
     {
         var n = items.Count;
         var episodes = EpisodeRepresentatives(items);
-        var topShare = n == 0 ? 0 : items.GroupBy(e => e.Symbol).Max(g => g.Count()) / (decimal)n;
+        var topShare = n == 0 ? 0 : items.GroupBy(e => e.Pair).Max(g => g.Count()) / (decimal)n;
 
         if (episodes.Count < 30)
             return ("样本不足", $"独立波次 {episodes.Count} < 30（原始 {n} 条）", topShare);
@@ -42,13 +42,13 @@ public static class SignalQualityRules
     }
 
     /// <summary>独立波次数量（同币种/周期/方向、间隔 ≤24 根归为一波）。</summary>
-    public static int EpisodeCount(IReadOnlyList<SignalJournalEntry> items) => EpisodeRepresentatives(items).Count;
+    public static int EpisodeCount(IReadOnlyList<SignalEntry> items) => EpisodeRepresentatives(items).Count;
 
     /// <summary>波次代表样本：同币种/周期/方向、间隔 ≤24 根归为一波，取每波首条。</summary>
-    public static List<SignalJournalEntry> EpisodeRepresentatives(IReadOnlyList<SignalJournalEntry> items)
+    public static List<SignalEntry> EpisodeRepresentatives(IReadOnlyList<SignalEntry> items)
     {
-        var reps = new List<SignalJournalEntry>();
-        foreach (var group in items.GroupBy(e => (e.Symbol, e.Interval, e.Side)))
+        var reps = new List<SignalEntry>();
+        foreach (var group in items.GroupBy(e => (e.Pair, e.Interval, e.Side)))
         {
             var barSeconds = MarketIntervals.IntervalSeconds(group.Key.Interval);
             long previous = long.MinValue;

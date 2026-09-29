@@ -4,9 +4,7 @@
 //   共振组需同时满足：① 独立波次 ≥50 ② 波次口径超额 t ≥2.5（比 2 更严，因多重比较）
 //   ③ 中位超额 >0 ④ 单一标的占比 ≤40%
 //   否则结论为"证据不足，不启用"。
-const fs = require('fs')
-const path = process.argv[2] ?? '/Users/johana/Desktop/mdk/backend/Mdk.Api/data/signals.jsonl'
-const rows = fs.readFileSync(path, 'utf8').trim().split('\n').map(l => JSON.parse(l))
+const rows = require('./signals-db.cjs').load(process.argv[2])
   .filter(r => r.outcome && r.outcome.status === 'ok' && r.confluence)
 
 const mean = a => a.length ? a.reduce((x, y) => x + y, 0) / a.length : NaN

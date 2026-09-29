@@ -1,7 +1,7 @@
 # 校验脚本（verify）
 
 对工作台的后端做**独立校验**——不依赖被测代码自身的断言，而是从接口取真实数据后独立复算/对照。
-全部用 `bun` 运行，前置条件：后端已在 `http://localhost:5099` 运行（`dotnet run --project backend/Mdk.Api`）。
+全部用 `bun` 运行（含 `node:` 风格脚本；本机不需要 node），前置条件：后端已在 `http://localhost:5099` 运行（`dotnet run --project backend/Mdk.Api`）。
 
 | 脚本 | 校验内容 | 运行 |
 |---|---|---|
@@ -20,4 +20,7 @@
 
 `./run-all.sh` 一键跑上面 8 项（需后端在 :5099；其余脚本按需单独运行）。
 
-说明：`signal-perf-audit.cjs` / `signal-robustness.cjs` 直接读 `backend/Mdk.Api/data/signals.jsonl`（信号绩效日志）。
+说明：绩效类脚本（`signal-perf-audit.cjs` / `signal-robustness.cjs` / `chan-ab-*.cjs` / `chan-mtf-probe.cjs`）
+直接读信号台账 `backend/Mdk.Api/data/signals.db`（SQLite），统一经 `signals-db.cjs` 读取并把行还原成脚本
+一直使用的结构（`symbol` 连写、`outcome` 嵌套对象），以保证换存储不改变统计口径；库里标的为
+`base_asset` / `quote_asset` 两列，`symbol` 由两者拼出仅供分组使用。脚本用 `bun` 运行。

@@ -1,6 +1,7 @@
 using Mdk.Api.Analysis;
 using Mdk.Api.Analysis.Chan;
 using Mdk.Api.Models;
+using Mdk.Api.Domain;
 
 namespace Mdk.Tests;
 
@@ -583,9 +584,9 @@ public static class ChanTests
         t.Case("分级规则_集中度过高降级为仅观察", () =>
         {
             // 构造：40 条样本，全部来自同一标的（占比 100%）→ 不应标"可参考"
-            var entries = Enumerable.Range(0, 40).Select(i => new SignalJournalEntry
+            var entries = Enumerable.Range(0, 40).Select(i => new SignalEntry
             {
-                Key = $"k{i}", Market = "spot", Symbol = i < 38 ? "AAAUSDT" : "BBBUSDT", Interval = "1h",
+                Market = MarketKind.Spot, Pair = TradingPair.Parse(i < 38 ? "AAAUSDT" : "BBBUSDT"), Interval = "1h",
                 Source = "测试", Side = i % 2 == 0 ? "buy" : "sell", Time = 1_000_000 + i * 40 * 3600L,
                 Price = 100, IsConfirmed = true, RecordedAt = 1_000_000,
                 // 超额取有波动的值：全部相同会让标准差为 0（t=0），被更早的显著性检查拦下，测不到集中度规则
@@ -604,9 +605,9 @@ public static class ChanTests
         t.Case("分级规则_波次不足则样本不足", () =>
         {
             // 20 条连续（同一波）→ 独立波次 1 < 30
-            var entries = Enumerable.Range(0, 20).Select(i => new SignalJournalEntry
+            var entries = Enumerable.Range(0, 20).Select(i => new SignalEntry
             {
-                Key = $"k{i}", Market = "spot", Symbol = "AAAUSDT", Interval = "1h",
+                Market = MarketKind.Spot, Pair = TradingPair.Parse("AAAUSDT"), Interval = "1h",
                 Source = "测试", Side = "buy", Time = 1_000_000 + i * 3600L,
                 Price = 100, IsConfirmed = true, RecordedAt = 1_000_000,
                 Outcome = new SignalOutcome { Status = "ok", Ret = 0.01m, Excess = 0.005m, NetPositive = true, StopHit = false },
@@ -620,13 +621,13 @@ public static class ChanTests
         t.Case("分级规则_满足全部条件才可参考", () =>
         {
             // 60 波、跨 3 个标的、超额稳定为正 → 可参考
-            var entries = new List<SignalJournalEntry>();
+            var entries = new List<SignalEntry>();
             var symbols = new[] { "AAAUSDT", "BBBUSDT", "CCCUSDT" };
             for (var i = 0; i < 60; i++)
             {
-                entries.Add(new SignalJournalEntry
+                entries.Add(new SignalEntry
                 {
-                    Key = $"k{i}", Market = "spot", Symbol = symbols[i % 3], Interval = "1h",
+                    Market = MarketKind.Spot, Pair = TradingPair.Parse(symbols[i % 3]), Interval = "1h",
                     Source = "测试", Side = i % 2 == 0 ? "buy" : "sell",
                     Time = 1_000_000 + i * 30 * 3600L,   // 间隔 30 根 → 每波独立
                     Price = 100, IsConfirmed = true, RecordedAt = 1_000_000,

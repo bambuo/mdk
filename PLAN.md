@@ -351,6 +351,54 @@ decimal 迁移期间核对日志发现回填实际跑了 10 标的 × 4 周期�
 根因：.NET 配置绑定对集合是**追加**而非替换，`BackfillOptions.Symbols/Intervals` 的预置默认值
 会与配置项相加。已改为空数组默认值 + 未配置即跳过，避免"默认值 + 配置"重复。
 
+## 0.15 信号台账改用 SQLite，标的拆成交易币/计价币两列（用户要求，2026-09-29）
+用户要求：**信号台账用 SQLite 存储**，且**标的必须拆成交易币与计价币两个独立字段**——
+与全项目"交易对用值对象（BaseAsset/QuoteAsset），不用裸字符串"的规范一致。
+
+### 改了什么
+| 项 | 之前 | 现在 |
+|---|---|---|
+| 存储 | 追加式 JSONL（`data/signals.jsonl`） | SQLite 单文件（`data/signals.db`，WAL 模式） |
+| 标的 | 一列连写串 `"symbol":"BTCUSDT"` | **两列** `base_asset` / `quote_asset`（`BTC` + `USDT`） |
+| 去重 | 手工拼 `key` 字符串（含 `\|bf` 后缀区分 A/B） | 唯一约束 `(market, base_asset, quote_asset, interval, source, side, signal_time, is_confirmed, origin)` |
+| 绩效回填 | 全表重写文件 | `UPDATE ... WHERE id=? AND outcome_status IS NULL` |
+| 待评估筛选 | 全量读入内存再筛 | SQL 按各周期持有期换算截止时间后分档取（`PendingOutcomes`） |
+| 类型 | `SignalJournalEntry` / `SignalJournal` | `SignalEntry` / `SignalStore`（标的为 `TradingPair` 值对象、市场为 `MarketKind`） |
+
+**去重为何纳入 `origin`**：同一信号需要在 live / backfill / backfill-nosub 三种来源下各存一条——
+次级别确认 A/B 对照与"在线样本 vs 回填样本"分组统计都依赖它。此前靠给 key 加 `|bf` 后缀实现，
+现在由约束表达，语义显式。
+
+**小数仍存 TEXT**（与 JSON 同口径的定点文本，八位小数、无尾随零）：SQLite 没有 decimal 类型，
+存 REAL 会把二进制浮点引回来，与"钱与点位不用浮点近似"冲突；因此 SQL 侧不做数值聚合，
+统计一律取回 C# 用 decimal 计算。测试里用 `pragma_table_info` 锁定了列类型为 TEXT。
+
+### 旧数据迁移
+启动时若 `signals` 表为空且旧 `signals.jsonl` 存在，自动一次性导入（旧文件保留为备份，此后不再写入）。
+标的按连写规则切成两列；切不开的行跳过并记日志。
+
+**实跑结果**：导入 **8977 条，跳过 0 条，涉及 22 个交易对**；日志逐条列出导入的交易对便于审计
+（ADA/USDT、BTC/USDT、ETH/USDT… 含 USD1/USDT、USDC/USDT 等锚定对）。
+库体积 2 777 088 字节，比 JSONL 的 5 667 259 字节小 **51%**（去掉重复列名与 JSON 括号开销）。
+
+### 校验脚本同步
+`signal-perf-audit.cjs`、`signal-robustness.cjs`、`chan-ab-sublevel.cjs`、`chan-ab-confluence.cjs`、
+`chan-mtf-probe.cjs` 五个脚本原先直接读 JSONL，现统一经 `tools/verify/signals-db.cjs` 读 SQLite
+（bun 内置 `bun:sqlite`，零外部依赖），并把行**还原成脚本一直使用的结构**（`symbol` 连写、`outcome` 嵌套对象），
+以保证统计口径与历史结论可比——换存储不改变统计。
+
+顺带修掉一个运行环境隐患：本机没有 `node`（只有 `bun`），而 `run-all.sh` 有三项用 `node` 调用；
+现已全部改用 `bun`（`bun:sqlite` 也正需要它）。
+
+### 验证证据
+| 验证项 | 结果 |
+|---|---|
+| 自带测试 | **112/112 通过**（新增 7 例：列拆分、自然键去重、origin 参与去重、定点文本往返、回填不覆盖、各周期持有期筛选、旧 JSONL 导入含跳过与不重复导入） |
+| 端到端导入 | 8977 条全部入库，0 跳过；`/api/signal-stats` 返回同一批统计（BTC 1h 现货 90 天：471 例/44 波） |
+| 实时写入 | 重启后 10 分钟内新增 27 条，`outcome_status` 回填正常（8852 已评估 / 152 待回填） |
+| 校验脚本 | `run-all.sh` 8 项全绿（数据源已切 SQLite）；样本量 3869 → 3879 源于实时新增，t 值 2.43 → 2.51 同向 |
+| 前端 | 页面刷新后信号卡显示"近90天 · 475例/44波"、缠论结构与点位正常，无 NaN/undefined |
+
 ## 1. 目录结构（全新项目 /Users/johana/Desktop/mdk）
 ```
 mdk/

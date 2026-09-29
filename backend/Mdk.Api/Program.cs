@@ -22,7 +22,9 @@ builder.Services.AddHttpClient<BinanceRestClient>(client => client.Timeout = Tim
 builder.Services.AddSingleton<SymbolCatalog>();
 builder.Services.AddSingleton<KlineStreamService>();
 builder.Services.AddSingleton<AnalysisService>();
-builder.Services.AddSingleton<SignalJournal>();
+builder.Services.AddSingleton(sp => new SignalStore(
+    Path.Combine(sp.GetRequiredService<IHostEnvironment>().ContentRootPath, "data"),
+    sp.GetRequiredService<ILogger<SignalStore>>()));
 builder.Services.AddHostedService<SignalOutcomeService>();
 builder.Services.AddHostedService<WatchlistAnalysisService>();
 builder.Services.AddSingleton<SignalBackfillService>();

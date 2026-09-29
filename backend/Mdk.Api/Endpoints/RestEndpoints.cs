@@ -137,27 +137,27 @@ internal static class RestEndpoints
 
         app.MapGet("/api/signal-stats", (
                 string? market, string? symbol, string? interval, int? days,
-                SignalJournal journal) =>
+                SignalStore store) =>
             {
                 if (!MarketKindExtensions.TryParse(market, out var marketKind))
                     return BadRequest($"不支持的市场 “{market}”，可用：spot, futures");
-                var marketKey = marketKind.ToString().ToLowerInvariant();
                 var daysClamped = Math.Clamp(days ?? 90, 1, 365);
                 var since = DateTimeOffset.UtcNow.AddDays(-daysClamped).ToUnixTimeSeconds();
 
-                var pool = journal.Snapshot()
-                    .Where(e => e.Market == marketKey
+                var pool = store.Snapshot()
+                    .Where(e => e.Market == marketKind
                                 && e.RecordedAt >= since
                                 && e.Outcome is { Status: "ok" })
                     // 同一信号可能先以「盘中预警」、再以「收盘确认」各记一条：统计时按信号本体去重，
                     // 优先保留确认版本，避免样本量虚增（否则预警存活率与绩效都会被重复计数污染）
-                    .GroupBy(e => (e.Market, e.Symbol, e.Interval, e.Source, e.Side, e.Time))
+                    .GroupBy(e => (e.Market, e.Pair, e.Interval, e.Source, e.Side, e.Time))
                     .Select(g => g.FirstOrDefault(e => e.IsConfirmed) ?? g.First())
                     .ToList();
                 if (!string.IsNullOrWhiteSpace(symbol))
                 {
-                    var s = symbol.Trim().ToUpperInvariant();
-                    pool = pool.Where(e => e.Symbol == s).ToList();
+                    // 交易对统一按值对象比较（接受 BTCUSDT / BTC-USDT / BTC/USDT 三种写法）
+                    var raw = symbol.Trim().ToUpperInvariant().Replace("/", "").Replace("-", "");
+                    if (TradingPair.TryParse(raw, out var want)) pool = pool.Where(e => e.Pair == want).ToList();
                 }
                 if (!string.IsNullOrWhiteSpace(interval))
                 {
@@ -165,7 +165,7 @@ internal static class RestEndpoints
                     pool = pool.Where(e => e.Interval == i).ToList();
                 }
 
-                SignalSourceStats? Summarize(string source, IReadOnlyList<SignalJournalEntry> items)
+                SignalSourceStats? Summarize(string source, IReadOnlyList<SignalEntry> items)
                 {
                     if (items.Count == 0) return null;
                     var grade = SignalQualityRules.Evaluate(items);
@@ -219,7 +219,7 @@ internal static class RestEndpoints
     };
 
     private static IReadOnlyList<SignalBucketStats> BuildBuckets(
-        string _, IReadOnlyList<SignalJournalEntry> pool, Func<SignalJournalEntry, string> label)
+        string _, IReadOnlyList<SignalEntry> pool, Func<SignalEntry, string> label)
     {
         return pool
             .GroupBy(label)
@@ -233,7 +233,7 @@ internal static class RestEndpoints
             .ToList();
     }
 
-    private static decimal Rate(IEnumerable<SignalJournalEntry> items, Func<SignalJournalEntry, bool> predicate) =>
+    private static decimal Rate(IEnumerable<SignalEntry> items, Func<SignalEntry, bool> predicate) =>
         items.Count(predicate) / (decimal)items.Count();
 
     private static IResult BadRequest(string? message) =>

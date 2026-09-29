@@ -1,8 +1,6 @@
 // A/B 对照：次级别确认开关对缠论回填样本表现的影响
 // 读 backend/Mdk.Api/data/signals.jsonl，比较 origin=backfill（含次级别确认）与 origin=backfill-nosub（关闭）
-const fs = require('fs')
-const path = process.argv[2] ?? '/Users/johana/Desktop/mdk/backend/Mdk.Api/data/signals.jsonl'
-const rows = fs.readFileSync(path, 'utf8').trim().split('\n').map(l => JSON.parse(l))
+const rows = require('./signals-db.cjs').load(process.argv[2])
 
 const mean = a => a.reduce((x, y) => x + y, 0) / a.length
 const std = a => { const m = mean(a); return Math.sqrt(mean(a.map(v => (v - m) ** 2))) }
