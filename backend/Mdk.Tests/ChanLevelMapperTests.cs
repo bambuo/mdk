@@ -11,9 +11,9 @@ public static class ChanLevelMapperTests
 {
     private static readonly long T0 = 1_000_000;
 
-    private static Candle Bar(int index) => new(T0 + index * 3600L, 100, 100.5, 99.5, 100, 10);
+    private static Candle Bar(int index) => new(T0 + index * 3600L, 100, 100.5m, 99.5m, 100, 10);
 
-    private static ChanStroke Stroke(int startBar, double startPrice, int endBar, double endPrice) =>
+    private static ChanStroke Stroke(int startBar, decimal startPrice, int endBar, decimal endPrice) =>
         new(startBar, startPrice, endBar, endPrice, endPrice > startPrice, IsConfirmed: true, StableFromBarIndex: endBar + 2);
 
     /// <summary>构造一个含 n 个中枢的结果：第 k 个中枢由 3 笔构成，价格区间 [100+k, 104+k]，时间 [k*4, k*4+4]。</summary>
@@ -25,18 +25,18 @@ public static class ChanLevelMapperTests
         for (var k = 0; k <= pivotCount; k++)
         {
             var baseBar = k * barReuse;
-            var low = 100.0 + k;
-            var high = 104.0 + k;
+            var low = 100.0m + k;
+            var high = 104.0m + k;
             strokes.Add(Stroke(baseBar, low, baseBar + 2, high));
-            strokes.Add(Stroke(baseBar + 2, high, baseBar + 3, low + 0.5));
-            strokes.Add(Stroke(baseBar + 3, low + 0.5, baseBar + 4, high - 0.5));
+            strokes.Add(Stroke(baseBar + 2, high, baseBar + 3, low + 0.5m));
+            strokes.Add(Stroke(baseBar + 3, low + 0.5m, baseBar + 4, high - 0.5m));
             pivots.Add(new ChanPivot(
-                Zg: high - 0.5, Zd: low + 0.5,
+                Zg: high - 0.5m, Zd: low + 0.5m,
                 StartStrokeIndex: k * 3, EndStrokeIndex: k * 3 + 2, StrokeCount: 3,
                 IsConfirmed: true, LeavingStrokeIndex: k * 3 + 3 < strokes.Count + 3 ? null : null));
         }
         var result = new ChanResult([], strokes, pivots, [],
-            new Dictionary<string, double?[]>());
+            new Dictionary<string, decimal?[]>());
         return (candles, result);
     }
 

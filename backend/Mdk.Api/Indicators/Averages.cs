@@ -11,24 +11,24 @@ namespace Mdk.Api.Indicators;
 /// 等价于平滑系数 α = 1/n 的 EMA（注意：与 span=n 的 EMA 不是一回事，
 /// Wilder(n) 的平滑程度约等于 SMA(2n−1)，明显更迟钝）。
 ///
-/// 所有派生指标（RSI/ATR/ADX）均基于本平滑。
-/// 输出与输入等长，前 n−1 个点为 NaN（样本不足时整段 NaN）。
+/// 全部派生指标（RSI/ATR/ADX）均基于本平滑。
+/// 数值类型为 decimal（价格与指标不做二进制浮点近似）；
+/// 未定义段用 null 表示（decimal 没有 NaN）。
 /// </summary>
 public static class WilderSmoothing
 {
-    public static double[] Rma(IReadOnlyList<double> values, int period)
+    public static decimal?[] Rma(IReadOnlyList<decimal> values, int period)
     {
         var n = values.Count;
-        var result = new double[n];
-        Array.Fill(result, double.NaN);
+        var result = new decimal?[n];
         if (period < 1 || n < period) return result;
 
-        double sum = 0;
+        decimal sum = 0;
         for (var i = 0; i < period; i++) sum += values[i];
         var ma = sum / period;
         result[period - 1] = ma;
 
-        var weight = (double)(period - 1) / period;
+        var weight = (decimal)(period - 1) / period;
         for (var i = period; i < n; i++)
         {
             ma = ma * weight + values[i] / period;
@@ -38,17 +38,16 @@ public static class WilderSmoothing
     }
 }
 
-/// <summary>简单移动平均，前 period−1 个点为 NaN。</summary>
+/// <summary>简单移动平均，前 period−1 个点为 null。</summary>
 public static class Sma
 {
-    public static double[] Compute(IReadOnlyList<double> values, int period)
+    public static decimal?[] Compute(IReadOnlyList<decimal> values, int period)
     {
         var n = values.Count;
-        var result = new double[n];
-        Array.Fill(result, double.NaN);
+        var result = new decimal?[n];
         if (period < 1 || n < period) return result;
 
-        double sum = 0;
+        decimal sum = 0;
         for (var i = 0; i < n; i++)
         {
             sum += values[i];
@@ -59,22 +58,21 @@ public static class Sma
     }
 }
 
-/// <summary>指数移动平均：种子为前 period 个值的 SMA，之后 EMA += α(EMAx − EMA)，α = 2/(period+1)。</summary>
+/// <summary>指数移动平均：种子为前 period 个值的 SMA，之后 EMA += α(x − EMA)，α = 2/(period+1)。</summary>
 public static class Ema
 {
-    public static double[] Compute(IReadOnlyList<double> values, int period)
+    public static decimal?[] Compute(IReadOnlyList<decimal> values, int period)
     {
         var n = values.Count;
-        var result = new double[n];
-        Array.Fill(result, double.NaN);
+        var result = new decimal?[n];
         if (period < 1 || n < period) return result;
 
-        double sum = 0;
+        decimal sum = 0;
         for (var i = 0; i < period; i++) sum += values[i];
         var ema = sum / period;
         result[period - 1] = ema;
 
-        var alpha = 2.0 / (period + 1);
+        var alpha = 2m / (period + 1);
         for (var i = period; i < n; i++)
         {
             ema += alpha * (values[i] - ema);

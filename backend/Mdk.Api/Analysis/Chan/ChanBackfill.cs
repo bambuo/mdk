@@ -26,15 +26,15 @@ public static class ChanBackfill
         long Time,
         string Side,
         string Kind,
-        double Price,
-        double ReferencePrice,
-        double StopPrice,
-        double? AreaRatio,
+        decimal Price,
+        decimal ReferencePrice,
+        decimal StopPrice,
+        decimal? AreaRatio,
         string Note,
         bool? TrendAligned,
-        double? Adx,
-        double? AtrPct,
-        double? BandwidthPct,
+        decimal? Adx,
+        decimal? AtrPct,
+        decimal? BandwidthPct,
         string? Confluence);
 
     /// <summary>
@@ -54,7 +54,7 @@ public static class ChanBackfill
         var l0 = ReplayPoints(mainHistory, subHistory, subInterval, options, fromTime, toTime);
 
         // 高周期结构：同样逐根复算（其次级别即本级别），用于趋势对齐与级别共振
-        double[]? htfEma50 = null;
+        decimal?[]? htfEma50 = null;
         long htfSeconds = 0;
         IReadOnlyList<ChanBuySellPoint> htfPoints = [];
         if (htfHistory is { Count: > 50 } && !string.IsNullOrEmpty(htfInterval))
@@ -86,7 +86,7 @@ public static class ChanBackfill
             Confluence: tags.GetValueOrDefault((p.Point.Time, p.Point.Side)))).ToList();
     }
 
-    private sealed record LevelPoint(ChanBuySellPoint Point, double? Adx, double? AtrPct, double? BandwidthPct);
+    private sealed record LevelPoint(ChanBuySellPoint Point, decimal? Adx, decimal? AtrPct, decimal? BandwidthPct);
 
     /// <summary>单级别的逐根复算（不含高周期相关内容，供 L0 与 L1 复用）。</summary>
     private static List<LevelPoint> ReplayPoints(
@@ -112,9 +112,9 @@ public static class ChanBackfill
             var window = new Candle[windowBars];
             for (var k = 0; k < windowBars; k++) window[k] = history[i - windowBars + 1 + k];
 
-            var closes = new double[windowBars];
-            var highs = new double[windowBars];
-            var lows = new double[windowBars];
+            var closes = new decimal[windowBars];
+            var highs = new decimal[windowBars];
+            var lows = new decimal[windowBars];
             for (var k = 0; k < windowBars; k++)
             {
                 closes[k] = window[k].Close;
@@ -138,27 +138,27 @@ public static class ChanBackfill
             foreach (var point in chan.Points.Where(p => p.Time == barTime))
             {
                 var dmi = AdxDmi.Compute(highs, lows, closes, 14);
-                var boll = BollingerBands.Compute(closes, 20, 2.0);
+                var boll = BollingerBands.Compute(closes, 20, 2.0m);
                 var last = windowBars - 1;
-                var adx = !double.IsNaN(dmi.Adx[last]) ? dmi.Adx[last] : (double?)null;
-                var atrPct = !double.IsNaN(atr[last]) && closes[last] > 0 ? atr[last] / closes[last] : (double?)null;
+                var adx = (dmi.Adx[last]) is not null ? dmi.Adx[last] : (decimal?)null;
+                var atrPct = (atr[last]) is not null && closes[last] > 0 ? atr[last] / closes[last] : (decimal?)null;
                 var mid = boll.Middle[last];
-                var bandwidth = !double.IsNaN(mid) && mid > 0
+                var bandwidth = (mid) is not null && mid > 0
                     ? (boll.Upper[last] - boll.Lower[last]) / mid
-                    : (double?)null;
+                    : (decimal?)null;
                 results.Add(new LevelPoint(point, adx, atrPct, bandwidth));
             }
         }
         return results;
     }
 
-    private static bool? TrendAligned(IReadOnlyList<Candle>? htf, double[]? ema50, long htfSeconds, long time, string side)
+    private static bool? TrendAligned(IReadOnlyList<Candle>? htf, decimal?[]? ema50, long htfSeconds, long time, string side)
     {
         if (htf is null || ema50 is null || htfSeconds <= 0) return null;
         for (var j = htf.Count - 1; j >= 0; j--)
         {
             if (htf[j].Time + htfSeconds > time) continue;
-            if (double.IsNaN(ema50[j])) return null;
+            if ((ema50[j]) is null) return null;
             var above = htf[j].Close > ema50[j];
             return side == "buy" ? above : !above;
         }

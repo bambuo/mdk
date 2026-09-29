@@ -8,17 +8,16 @@ namespace Mdk.Api.Analysis.Chan;
 public static class ChanDivergenceDetector
 {
     /// <summary>计算某笔区间内的 MACD 柱面积（绝对值累加）。</summary>
-    public static double Area(IReadOnlyList<ChanStroke> strokes, int strokeIndex, double[] macdHist)
+    public static decimal Area(IReadOnlyList<ChanStroke> strokes, int strokeIndex, decimal?[] macdHist)
     {
         if (strokeIndex < 0 || strokeIndex >= strokes.Count) return 0;
         var s = strokes[strokeIndex];
         var from = Math.Max(0, Math.Min(s.StartBarIndex, s.EndBarIndex));
         var to = Math.Min(macdHist.Length - 1, Math.Max(s.StartBarIndex, s.EndBarIndex));
-        var sum = 0.0;
+        var sum = 0.0m;
         for (var i = from; i <= to; i++)
         {
-            var v = macdHist[i];
-            if (!double.IsNaN(v)) sum += Math.Abs(v);
+            if (macdHist[i] is { } v) sum += Math.Abs(v);
         }
         return sum;
     }
@@ -31,8 +30,8 @@ public static class ChanDivergenceDetector
     public static ChanDivergence? Check(
         IReadOnlyList<ChanStroke> strokes,
         ChanPivot pivot,
-        double[] macdHist,
-        double areaRatioThreshold)
+        decimal?[] macdHist,
+        decimal areaRatioThreshold)
     {
         if (pivot.LeavingStrokeIndex is not { } leaveIndex) return null;
         var enterIndex = FindEnterStroke(strokes, leaveIndex);

@@ -4,6 +4,7 @@ using System.Text.Json.Serialization;
 using Mdk.Api.Analysis;
 using Mdk.Api.Analysis.Chan;
 using Mdk.Api.Binance;
+using Mdk.Api.Domain;
 using Mdk.Api.Endpoints;
 
 var builder = WebApplication.CreateBuilder(args);
@@ -27,11 +28,13 @@ builder.Services.AddHostedService<WatchlistAnalysisService>();
 builder.Services.AddSingleton<SignalBackfillService>();
 builder.Services.AddHostedService(sp => sp.GetRequiredService<SignalBackfillService>());
 
-// 枚举以小写参与 JSON（market: "spot" | "futures"）
+// 枚举以小写参与 JSON（market: "spot" | "futures"）；decimal 去掉标度与伪精度（见 DecimalJsonConverter）
 var enumConverter = new JsonStringEnumConverter(JsonNamingPolicy.CamelCase, allowIntegerValues: false);
 builder.Services.ConfigureHttpJsonOptions(options =>
 {
     options.SerializerOptions.Converters.Add(enumConverter);
+    options.SerializerOptions.Converters.Add(new DecimalJsonConverter());
+    options.SerializerOptions.Converters.Add(new NullableDecimalJsonConverter());
 });
 
 // 前端开发服务器来源（生产同源部署时无需 CORS）

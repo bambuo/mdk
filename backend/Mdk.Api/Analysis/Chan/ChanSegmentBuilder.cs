@@ -29,7 +29,7 @@ public static class ChanSegmentBuilder
     public const int MinStrokes = 3;
 
     /// <summary>特征序列元素（由反向笔构成，做包含处理后可能覆盖多笔）。</summary>
-    private sealed record Element(double High, double Low, int StrokeIndex, int EndBarIndex);
+    private sealed record Element(decimal High, decimal Low, int StrokeIndex, int EndBarIndex);
 
     public static IReadOnlyList<ChanSegment> Build(IReadOnlyList<ChanStroke> strokes)
     {
@@ -163,7 +163,7 @@ public static class ChanSegmentBuilder
             2 => elements[^1].High > elements[^2].High,
             _ => segmentIsUp,
         };
-        double high, low;
+        decimal high, low;
         if (up)
         {
             high = Math.Max(last.High, next.High);

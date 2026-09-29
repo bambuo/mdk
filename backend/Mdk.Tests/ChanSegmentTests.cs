@@ -10,7 +10,7 @@ namespace Mdk.Tests;
 public static class ChanSegmentTests
 {
     /// <summary>构造笔：给定 (起点价, 终点价) 序列，K线索引按每笔跨 2 根递增。</summary>
-    private static List<ChanStroke> MakeStrokes(params double[] prices)
+    private static List<ChanStroke> MakeStrokes(params decimal[] prices)
     {
         var strokes = new List<ChanStroke>();
         for (var i = 0; i + 1 < prices.Length; i++)
@@ -171,8 +171,8 @@ public static class ChanSegmentTests
         var time = 7_000_000L;
         for (var i = 0; i < 240; i++)
         {
-            var price = 100 + Math.Sin(i / 5.0) * 8 + Math.Sin(i / 19.0) * 4;
-            candles.Add(new Mdk.Api.Models.Candle(time + i * 3600L, price, price + 1.0, price - 1.0, price, 10));
+            var price = 100 + (decimal)Math.Sin(i / 5.0) * 8 + (decimal)Math.Sin(i / 19.0) * 4;
+            candles.Add(new Mdk.Api.Models.Candle(time + i * 3600L, price, price + 1.0m, price - 1.0m, price, 10));
         }
         return candles;
     }

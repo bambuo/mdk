@@ -10,9 +10,9 @@ public static class AdxDmiTests
         {
             // 单边上涨：+DM 恒为 1，−DM 为 0 → +DI=50、−DI=0、DX=100 → ADX→100
             const int n = 60;
-            var highs = new double[n];
-            var lows = new double[n];
-            var closes = new double[n];
+            var highs = new decimal[n];
+            var lows = new decimal[n];
+            var closes = new decimal[n];
             for (var i = 0; i < n; i++)
             {
                 highs[i] = i + 2;
@@ -47,7 +47,7 @@ public static class MacdTests
     {
         t.Case("Macd_常量序列_全为0", () =>
         {
-            var closes = Enumerable.Repeat(100.0, 100).ToArray();
+            var closes = Enumerable.Repeat(100.0m, 100).ToArray();
             var macd = Macd.Compute(closes);
 
             Assert.Nan(macd.Dif[24]);
@@ -58,16 +58,16 @@ public static class MacdTests
 
         t.Case("Macd_线性序列_DIF收敛到7倍斜率", () =>
         {
-            // 线性序列上 EMA 滞后 = 斜率×(1−α)/α：α12 → 5.5，α26 → 12.5，DIF = 7×斜率
-            var closes = Enumerable.Range(0, 200).Select(i => 100.0 + i).ToArray();
+            // 线性序列上 EMA 滞后 = 斜率×(1−α)/α：α12 → 5.5m，α26 → 12.5m，DIF = 7×斜率
+            var closes = Enumerable.Range(0, 200).Select(i => (decimal)(100.0 + i)).ToArray();
             var macd = Macd.Compute(closes);
 
-            Assert.InRange(macd.Dif[150], 6.5, 7.5);
+            Assert.InRange(macd.Dif[150], 6.5m, 7.5m);
         });
 
         t.Case("Macd_有效起点位置", () =>
         {
-            var closes = Enumerable.Range(0, 60).Select(i => 100.0 + i * 0.5).ToArray();
+            var closes = Enumerable.Range(0, 60).Select(i => (decimal)(100.0 + i * 0.5)).ToArray();
             var macd = Macd.Compute(closes);
 
             Assert.Nan(macd.Dif[24]);
@@ -84,8 +84,8 @@ public static class BollingerBandsTests
     {
         t.Case("Boll_常量序列_三线重合", () =>
         {
-            var closes = Enumerable.Repeat(42.0, 40).ToArray();
-            var boll = BollingerBands.Compute(closes, 20, 2.0);
+            var closes = Enumerable.Repeat(42.0m, 40).ToArray();
+            var boll = BollingerBands.Compute(closes, 20, 2.0m);
             Assert.Equal(42, boll.Upper[^1], 10);
             Assert.Equal(42, boll.Middle[^1], 10);
             Assert.Equal(42, boll.Lower[^1], 10);
@@ -93,13 +93,13 @@ public static class BollingerBandsTests
 
         t.Case("Boll_手算对照_均值与总体标准差", () =>
         {
-            double[] closes = [1, 2, 3, 4, 5];
-            var boll = BollingerBands.Compute(closes, 5, 2.0);
+            decimal[] closes = [1, 2, 3, 4, 5];
+            var boll = BollingerBands.Compute(closes, 5, 2.0m);
 
             Assert.Equal(3, boll.Middle[4], 10);
-            // 总体标准差 σ = √2 → 上轨 = 3 + 2√2 ≈ 5.8284
-            Assert.Equal(5.82842712474619, boll.Upper[4], 8);
-            Assert.Equal(0.1715728752538097, boll.Lower[4], 8);
+            // 总体标准差 σ = √2 → 上轨 = 3 + 2√2 ≈ 5.8284m
+            Assert.Equal(5.82842712474619m, boll.Upper[4], 8);
+            Assert.Equal(0.1715728752538097m, boll.Lower[4], 8);
         });
     }
 }

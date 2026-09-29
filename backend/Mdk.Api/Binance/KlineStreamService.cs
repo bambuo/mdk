@@ -324,8 +324,8 @@ public sealed class KlineStreamService : IAsyncDisposable
             }
         }
 
-        private static double Str(JsonElement parent, string name) =>
-            double.Parse(parent.GetProperty(name).GetString()!, CultureInfo.InvariantCulture);
+        private static decimal Str(JsonElement parent, string name) =>
+            decimal.Parse(parent.GetProperty(name).GetString()!, CultureInfo.InvariantCulture);
 
         /// <summary>接收一条完整文本帧（WS 分片自动拼接），远端关闭返回 null。</summary>
         private static async Task<string?> ReceiveFullTextAsync(ClientWebSocket ws, byte[] buffer, CancellationToken ct)

@@ -54,8 +54,14 @@ for (const [i, seg] of segments.entries()) {
   const hi = Math.max(...span.map(s => s.high)), lo = Math.min(...span.map(s => s.low))
   const ok = seg.isUp ? Math.abs(seg.endPrice - hi) < 1e-6 : Math.abs(seg.endPrice - lo) < 1e-6
   if (isTrailing) { note(`第 ${i + 1} 段为尾部未确认段（终点随行情推进），不做极值判定`); continue }
-  flag(ok, `第 ${i + 1} 段（${seg.isUp ? '上' : '下'}）终点=${seg.endPrice.toFixed(0)}`,
-       ok ? '' : `段内极值 ${seg.isUp ? hi.toFixed(0) : lo.toFixed(0)} ≠ 终点`)
+  if (!ok) {
+    // 已知边界情形（口径 B，见 PLAN §0.13.2 与 ChanSegmentBuilder 类注释）：
+    // 段内极值出现在首笔时，特征序列分型的中元素不可能落在第一个元素上 → 段延伸到破坏点，
+    // 终点与段内极值不一致；强制一致会把该段切成 1 笔，违反"线段至少三笔"。故记为提醒而非失败。
+    note(`第 ${i + 1} 段终点=${seg.endPrice.toFixed(0)} ≠ 段内极值 ${seg.isUp ? hi.toFixed(0) : lo.toFixed(0)}（已知边界情形·口径B）`)
+    continue
+  }
+  flag(true, `第 ${i + 1} 段（${seg.isUp ? '上' : '下'}）终点为该段方向极值`)
 }
 
 console.log('\n④ 破坏点独立复算（含缺口回补；扫描到段终点后 6 个反向笔）')

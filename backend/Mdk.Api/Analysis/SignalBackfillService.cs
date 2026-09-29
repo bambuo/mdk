@@ -19,11 +19,14 @@ public sealed class BackfillOptions
     /// <summary>回填天数（币安可提供更长历史，按需调整）。</summary>
     public int Days { get; set; } = 90;
 
-    /// <summary>回填的标的列表。</summary>
-    public string[] Symbols { get; set; } = ["BTCUSDT", "ETHUSDT", "SOLUSDT", "BNBUSDT", "XRPUSDT"];
+    /// <summary>
+    /// 回填的标的列表。默认留空（不用预置数组默认值）：
+    /// .NET 配置绑定对集合是"追加"而非"替换"，预置默认值会导致实际条目 = 默认 + 配置（曾出现 5+5=10 的重复标的）。
+    /// </summary>
+    public string[] Symbols { get; set; } = [];
 
-    /// <summary>回填的周期列表（4h 的次级别是 1h，1h 的次级别是 15m，数据量差异较大）。</summary>
-    public string[] Intervals { get; set; } = ["1h", "4h"];
+    /// <summary>回填的周期列表（4h 的次级别是 1h，1h 的次级别是 15m，数据量差异较大）；同上，默认留空。</summary>
+    public string[] Intervals { get; set; } = [];
 }
 
 /// <summary>回填进度（供 /api/backfill/status 查询）。</summary>
@@ -70,6 +73,11 @@ public sealed class SignalBackfillService(
         }
         catch (OperationCanceledException)
         {
+            return;
+        }
+        if (_options.Symbols.Length == 0 || _options.Intervals.Length == 0)
+        {
+            logger.LogInformation("历史回填跳过：未配置 Backfill:Symbols / Backfill:Intervals");
             return;
         }
         await RunAsync(_options.Days, _options.Symbols, _options.Intervals, stoppingToken);

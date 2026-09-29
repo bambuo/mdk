@@ -21,9 +21,9 @@ public static class ChanSignals
         IReadOnlyList<Candle> candles,
         IReadOnlyList<ChanStroke> strokes,
         IReadOnlyList<ChanPivot> pivots,
-        double[] macdHist,
-        double[] atr,
-        double areaRatioThreshold,
+        decimal?[] macdHist,
+        decimal?[] atr,
+        decimal areaRatioThreshold,
         int warmupBars = 0,
         Func<long, long, string, bool>? subLevelConfirmed = null)
     {
@@ -58,7 +58,7 @@ public static class ChanSignals
             var kind = isUp ? "1卖" : "1买";
             var side = isUp ? "sell" : "buy";
             var reference = isUp ? stroke.High : stroke.Low;
-            var note = $"MACD 面积背驰 {dv.AreaRatio:0.00}，参考{(isUp ? "高点" : "低点")} {reference:0.##}";
+            var note = $"MACD 面积背驰 {dv.AreaRatio:0.00m}，参考{(isUp ? "高点" : "低点")} {reference:0.##}";
 
             if (isUp) sellAnchors.Add(leaveIndex);
             else buyAnchors.Add(leaveIndex);
@@ -158,12 +158,12 @@ public static class ChanSignals
         List<ChanBuySellPoint> points,
         IReadOnlyList<Candle> candles,
         IReadOnlyList<ChanStroke> strokes,
-        double[] atr,
+        decimal?[] atr,
         int anchorStrokeIndex,
         string kind,
         string side,
-        double referencePrice,
-        double? areaRatio,
+        decimal referencePrice,
+        decimal? areaRatio,
         string note)
     {
         if (anchorStrokeIndex < 0 || anchorStrokeIndex >= strokes.Count) return false;
@@ -172,10 +172,10 @@ public static class ChanSignals
         if (stableBar < 0 || stableBar >= candles.Count) return false;
 
         var bar = candles[stableBar];
-        var atrValue = stableBar < atr.Length && !double.IsNaN(atr[stableBar]) && atr[stableBar] > 0
-            ? atr[stableBar]
-            : bar.Close * 0.01;
-        var stop = side == "buy" ? referencePrice - 0.5 * atrValue : referencePrice + 0.5 * atrValue;
+        var atrValue = stableBar < atr.Length && atr[stableBar] is > 0m
+            ? atr[stableBar]!.Value
+            : bar.Close * 0.01m;
+        var stop = side == "buy" ? referencePrice - 0.5m * atrValue : referencePrice + 0.5m * atrValue;
 
         // 确认时价格若已越过结构失效位，该信号按定义已不可交易（止损落到入场价反向侧）→ 丢弃
         if (side == "buy" && stop >= bar.Close) return false;

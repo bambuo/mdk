@@ -36,9 +36,9 @@ public static class AnalysisEngine
         var atr = Atr.Compute(highs, lows, closes, 14);
         var dmi = AdxDmi.Compute(highs, lows, closes, 14);
         var macd = Macd.Compute(closes);
-        var boll = BollingerBands.Compute(closes, 20, 2.0);
+        var boll = BollingerBands.Compute(closes, 20, 2.0m);
 
-        // 信号用快慢线：1h 可选提速参数（10/30），其余周期用 20/50（依据 PLAN §0.4 实测）
+        // 信号用快慢线：1h 可选提速参数（10/30），其余周期用 20/50（依据 PLAN §0.4m 实测）
         var useFast = so.UseFastEmaOn1h && interval == "1h";
         var sigFast = useFast ? Ema.Compute(closes, so.FastEmaPeriod) : ema20;
         var sigSlow = useFast ? Ema.Compute(closes, so.FastEmaSlowPeriod) : ema50;
@@ -50,13 +50,13 @@ public static class AnalysisEngine
         // 信号发生时的市场状态（ADX 强度 / 波动率 / 带宽），用于事后状态依赖统计
         SignalRegime RegimeAt(int i)
         {
-            var adx = i < dmi.Adx.Length && !double.IsNaN(dmi.Adx[i]) ? dmi.Adx[i] : (double?)null;
+            var adx = i < dmi.Adx.Length && (dmi.Adx[i]) is not null ? dmi.Adx[i] : (decimal?)null;
             var close = candles[i].Close;
-            var atrPct = i < atr.Length && !double.IsNaN(atr[i]) && close > 0 ? atr[i] / close : (double?)null;
+            var atrPct = i < atr.Length && (atr[i]) is not null && close > 0 ? atr[i] / close : (decimal?)null;
             var mid = boll.Middle[i];
-            var bandwidth = !double.IsNaN(mid) && mid > 0 && !double.IsNaN(boll.Upper[i]) && !double.IsNaN(boll.Lower[i])
+            var bandwidth = (mid) is not null && mid > 0 && (boll.Upper[i]) is not null && (boll.Lower[i]) is not null
                 ? (boll.Upper[i] - boll.Lower[i]) / mid
-                : (double?)null;
+                : (decimal?)null;
             return new SignalRegime(adx, atrPct, bandwidth);
         }
 
@@ -75,7 +75,7 @@ public static class AnalysisEngine
         {
             // 关键：MACD/ATR 必须始终在"内部固定窗口"上计算——否则同一结构在不同显示窗口下
             // 会因指标起算点不同而得出不同的止损与可交易性判定，破坏复现性（2026-09-29 复测发现）。
-            double[] chanHist, chanAtr;
+            decimal?[] chanHist, chanAtr;
             if (ReferenceEquals(chanWindow, candles))
             {
                 chanHist = macd.Hist;
@@ -184,7 +184,7 @@ public static class AnalysisEngine
             chanLevels = chanLevelList;
         }
 
-        var series = new Dictionary<string, double?[]>(StringComparer.Ordinal)
+        var series = new Dictionary<string, decimal?[]>(StringComparer.Ordinal)
         {
             ["ema20"] = ToNullable(ema20),
             ["ema50"] = ToNullable(ema50),
@@ -297,10 +297,10 @@ public static class AnalysisEngine
     private static Chan.ChanResult AlignToDisplayWindow(Chan.ChanResult raw, int offset)
     {
         var displayLength = raw.Series.Values.FirstOrDefault()?.Length - offset ?? 0;
-        var series = new Dictionary<string, double?[]>(StringComparer.Ordinal);
+        var series = new Dictionary<string, decimal?[]>(StringComparer.Ordinal);
         foreach (var (key, values) in raw.Series)
         {
-            var aligned = new double?[displayLength];
+            var aligned = new decimal?[displayLength];
             if (offset >= 0) Array.Copy(values, offset, aligned, 0, aligned.Length);
             else Array.Copy(values, 0, aligned, -offset, values.Length);
             series[key] = aligned;
@@ -362,9 +362,9 @@ public static class AnalysisEngine
     }
 
     /// <summary>线段序列（裁剪到显示窗口）：与窗口有交集的线段按边界截断后连线。</summary>
-    private static double?[] BuildSegmentSeries(IReadOnlyList<Candle> candles, IReadOnlyList<Chan.ChanSegment> segments)
+    private static decimal?[] BuildSegmentSeries(IReadOnlyList<Candle> candles, IReadOnlyList<Chan.ChanSegment> segments)
     {
-        var line = new double?[candles.Count];
+        var line = new decimal?[candles.Count];
         foreach (var seg in segments)
         {
             if (seg.EndBarIndex < 0 || seg.StartBarIndex > candles.Count - 1) continue;   // 与显示窗口无交集
@@ -384,8 +384,8 @@ public static class AnalysisEngine
         return candles.Count - 1;
     }
 
-    private static double?[] ToNullable(double[] values) =>
-        Array.ConvertAll(values, v => double.IsNaN(v) ? (double?)null : v);
+    private static decimal?[] ToNullable(decimal?[] values) =>
+        Array.ConvertAll(values, v => (v) is null ? (decimal?)null : v);
 }
 
 /// <summary>
@@ -397,12 +397,12 @@ public static class TrendAnalyzer
 {
     public static TrendResult Analyze(
         IReadOnlyList<Candle> candles,
-        double[] ema50,
-        double[] ema200,
+        decimal?[] ema50,
+        decimal?[] ema200,
         AdxDmi.AdxDmiResult dmi)
     {
         var price = candles[^1].Close;
-        double bull = 0, bear = 0;
+        decimal bull = 0, bear = 0;
         var reasons = new List<string>();
 
         var e50 = LastValid(ema50);
@@ -488,10 +488,10 @@ public static class TrendAnalyzer
         return new TrendResult(direction, score, reasons);
     }
 
-    private static double? LastValid(double[] values)
+    private static decimal? LastValid(decimal?[] values)
     {
         for (var i = values.Length - 1; i >= 0; i--)
-            if (!double.IsNaN(values[i]))
+            if ((values[i]) is not null)
                 return values[i];
         return null;
     }
@@ -499,7 +499,7 @@ public static class TrendAnalyzer
 
 /// <summary>
 /// 关键价格点位（概念二：支撑位与阻力位）。
-/// 摆动高低点（±lookback 根K线的分形极值）按 0.5×ATR 容差聚类，
+/// 摆动高低点（±lookback 根K线的分形极值）按 0.5m×ATR 容差聚类，
 /// 触碰次数即强度；按现价上下分为阻力/支撑，各取最近的 maxPerSide 个。
 /// </summary>
 public static class SupportResistance
@@ -526,17 +526,17 @@ public static class SupportResistance
 
     public static IReadOnlyList<PriceLevel> FindLevels(
         IReadOnlyList<Candle> candles,
-        double[] atr,
+        decimal?[] atr,
         int lookback = 3,
         int maxPerSide = 5)
     {
         var last = candles[^1];
-        var tolerance = 0.5 * (LastValid(atr) ?? last.Close * 0.01);
+        var tolerance = 0.5m * (LastValid(atr) ?? last.Close * 0.01m);
 
         var swings = FindSwings(candles, lookback).Select(s => s.Price).ToList();
 
         // 按时间序聚类：价差在容差内的摆动点视为同一位点，均值作价位，次数作强度
-        var clustered = new List<(double Sum, int Count)>();
+        var clustered = new List<(decimal Sum, int Count)>();
         foreach (var price in swings)
         {
             var merged = false;
@@ -572,12 +572,12 @@ public static class SupportResistance
         return resistances.Concat(supports).ToList();
     }
 
-    private static double Pct(double level, double price) => Math.Round((level - price) / price * 100, 2);
+    private static decimal Pct(decimal level, decimal price) => Math.Round((level - price) / price * 100, 2);
 
-    private static double? LastValid(double[] values)
+    private static decimal? LastValid(decimal?[] values)
     {
         for (var i = values.Length - 1; i >= 0; i--)
-            if (!double.IsNaN(values[i]))
+            if ((values[i]) is not null)
                 return values[i];
         return null;
     }
@@ -585,11 +585,11 @@ public static class SupportResistance
 
 /// <summary>
 /// 买卖点信号（概念三：买卖点相关指标）。
-/// v2/v3 可用性改造（2026-09-28，依据事后审计数据，见 PLAN §0.4/§0.5）：
+/// v2/v3 可用性改造（2026-09-28，依据事后审计数据，见 PLAN §0.4m/§0.5m）：
 /// ① 收盘确认分级：只把「已收盘K线」上的交叉记为确认信号（不可撤销）；
 ///    未收盘K线上的交叉记为盘中预警（IsConfirmed=false，可能消失）——消除重绘，兼顾即时性。
 /// ② 冷却去重：同源同向在 cooldownBars 根内重复触发不重复报。
-/// ③ 多周期共振标记：TrendAligned；注意：生产样本中该过滤证据矛盾（见 PLAN §0.5），仅作标注不作依据。
+/// ③ 多周期共振标记：TrendAligned；注意：生产样本中该过滤证据矛盾（见 PLAN §0.5m），仅作标注不作依据。
 /// ④ 市场状态随信号记录（ADX/ATR%/带宽），用于事后判断信号的状态依赖性。
 /// ⑤ 实验性「结构确认」信号源：价格触及由**已确认历史摆动点**构成的支撑/阻力并收回，
 ///    不使用未来数据（即时性优于均线交叉；按关键位反应入场，止损更抗噪）。
@@ -599,17 +599,17 @@ public static class SignalEngine
     /// <summary>结构信号：形成有效位点所需的最少摆动点触碰次数（3 次以上才算确立的位点，抑制噪音触发）。</summary>
     private const int SrMinTouches = 3;
 
-    /// <summary>结构信号：收盘有效收回位点所需的额外幅度（0.1×ATR，避免刚好压线的假收回）。</summary>
-    private const double SrReclaimAtr = 0.1;
+    /// <summary>结构信号：收盘有效收回位点所需的额外幅度（0.1m×ATR，避免刚好压线的假收回）。</summary>
+    private const decimal SrReclaimAtr = 0.1m;
 
     public static IReadOnlyList<TradeSignal> Generate(
         IReadOnlyList<Candle> candles,
-        double[] emaFast,
-        double[] emaSlow,
-        double[] rsi,
-        double[] dif,
-        double[] dea,
-        double[] atr,
+        decimal?[] emaFast,
+        decimal?[] emaSlow,
+        decimal?[] rsi,
+        decimal?[] dif,
+        decimal?[] dea,
+        decimal?[] atr,
         int cooldownBars = 6,
         IReadOnlyList<Candle>? htfCandles = null,
         string? htfInterval = null,
@@ -620,10 +620,10 @@ public static class SignalEngine
         var signals = new List<TradeSignal>();
 
         // 高周期趋势：对每个信号时间，取「已收盘」的最新高周期K线，比较其收盘价与高周期 EMA50
-        double[]? htfEma50 = null;
+        decimal?[]? htfEma50 = null;
         long[]? htfTimes = null;
         long htfSeconds = 0;
-        double[]? htfCloses = null;
+        decimal[]? htfCloses = null;
         if (htfCandles is { Count: > 50 } htf && !string.IsNullOrEmpty(htfInterval))
         {
             htfCloses = htf.Select(c => c.Close).ToArray();
@@ -641,7 +641,7 @@ public static class SignalEngine
             {
                 if (htfTimes[j] + htfSeconds <= signalTime) { idx = j; break; }
             }
-            if (idx < 0 || double.IsNaN(htfEma50[idx])) return null;
+            if (idx < 0 || (htfEma50[idx]) is null) return null;
             var above = htfCloses[idx] > htfEma50[idx];
             return side == "buy" ? above : !above;
         }
@@ -649,8 +649,8 @@ public static class SignalEngine
         void Add(int i, string side, string source, string note, bool confirmed)
         {
             var price = candles[i].Close;
-            double? stop = null;
-            if (i < atr.Length && !double.IsNaN(atr[i]))
+            decimal? stop = null;
+            if (i < atr.Length && (atr[i]) is not null)
                 stop = side == "buy" ? price - 2 * atr[i] : price + 2 * atr[i];
             var regime = regimeAt?.Invoke(i) ?? default;
             signals.Add(new TradeSignal(
@@ -729,37 +729,37 @@ public static class SignalEngine
     /// 只用历史摆动点（Index ≤ i − lookback），不使用未来数据。
     /// </summary>
     private static (string Side, string Note)? TryStructure(
-        int i, IReadOnlyList<Candle> candles, IReadOnlyList<SwingPoint> swings, double[] atr)
+        int i, IReadOnlyList<Candle> candles, IReadOnlyList<SwingPoint> swings, decimal?[] atr)
     {
         var bar = candles[i];
-        var atrVal = atr[i];
-        if (atrVal <= 0) return null;
-        var tol = 0.5 * atrVal;
+        var atrVal = atr[i] ?? 0m;
+        if (atrVal <= 0m) return null;
+        var tol = 0.5m * atrVal;
         var reclaim = SrReclaimAtr * atrVal;
 
         // 支撑（用历史摆动低点）：最低价进入位点容差带、收盘有效收回位点上方、且收阳
         var bestSupport = FindLevel(swings, i, isHigh: false, bar.Low, tol);
-        if (bestSupport is { } support && bar.Low <= support.Price + 0.25 * atrVal && bar.Close > support.Price + reclaim && bar.Close > bar.Open)
+        if (bestSupport is { } support && bar.Low <= support.Price + 0.25m * atrVal && bar.Close > support.Price + reclaim && bar.Close > bar.Open)
             return ("buy", $"触及支撑 {support.Price:0.##}（{support.Touches} 次触碰）收回，结构确认（实验）");
 
         // 阻力（用历史摆动高点）：最高价进入位点容差带、收盘有效回落到位点下方、且收阴
         var bestResistance = FindLevel(swings, i, isHigh: true, bar.High, tol);
-        if (bestResistance is { } resistance && bar.High >= resistance.Price - 0.25 * atrVal && bar.Close < resistance.Price - reclaim && bar.Close < bar.Open)
+        if (bestResistance is { } resistance && bar.High >= resistance.Price - 0.25m * atrVal && bar.Close < resistance.Price - reclaim && bar.Close < bar.Open)
             return ("sell", $"触及阻力 {resistance.Price:0.##}（{resistance.Touches} 次触碰）回落，结构确认（实验）");
 
         return null;
     }
 
     /// <summary>在已确认的历史摆动点中，找出离 price 最近且触碰次数达标的位点。</summary>
-    private static (double Price, int Touches)? FindLevel(
-        IReadOnlyList<SwingPoint> swings, int barIndex, bool isHigh, double price, double tol)
+    private static (decimal Price, int Touches)? FindLevel(
+        IReadOnlyList<SwingPoint> swings, int barIndex, bool isHigh, decimal price, decimal tol)
     {
         // 已确认的摆动点：至少滞后 barIndex 若干根（此处用全局 lookback=3 的共识：Index ≤ barIndex − 3）
         var minIndex = barIndex - 3;
         var candidates = swings.Where(s => s.IsHigh == isHigh && s.Index <= minIndex).ToList();
         if (candidates.Count == 0) return null;
 
-        (double Price, int Touches)? best = null;
+        (decimal Price, int Touches)? best = null;
         foreach (var c in candidates)
         {
             if (Math.Abs(c.Price - price) > tol) continue;
@@ -781,6 +781,6 @@ public static class SignalEngine
         add(i, side, source, note, true);
     }
 
-    private static bool Ok(double[] values, int i) =>
-        i < values.Length && !double.IsNaN(values[i]);
+    private static bool Ok(decimal?[] values, int i) =>
+        i < values.Length && (values[i]) is not null;
 }

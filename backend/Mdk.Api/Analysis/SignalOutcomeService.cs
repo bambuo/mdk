@@ -99,7 +99,7 @@ public sealed class SignalOutcomeService(
                 var exit = closes[idx + horizon];
                 var ret = dir * (exit / entry.Price - 1);
 
-                double driftSum = 0;
+                decimal driftSum = 0;
                 long driftN = 0;
                 for (var j = 0; j + horizon < closes.Length; j++)
                 {
@@ -108,8 +108,8 @@ public sealed class SignalOutcomeService(
                 }
                 var drift = driftN > 0 ? driftSum / driftN : 0;
 
-                double mfe = double.MinValue;
-                double mae = double.MaxValue;
+                decimal mfe = decimal.MinValue;
+                decimal mae = decimal.MaxValue;
                 var stopHit = false;
                 for (var k = idx; k <= idx + horizon && k < candles.Length; k++)
                 {
@@ -121,7 +121,7 @@ public sealed class SignalOutcomeService(
                         stopHit = true;
                 }
 
-                var feeRt = market == MarketKind.Futures ? 0.001 : 0.002;
+                var feeRt = market == MarketKind.Futures ? 0.001m : 0.002m;
                 journal.MarkOutcome(entry.Key, new SignalOutcome
                 {
                     Status = "ok",

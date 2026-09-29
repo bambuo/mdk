@@ -203,7 +203,7 @@ internal static class RestEndpoints
     }
 
     /// <summary>市场状态分桶：ADX 强度（趋势/过渡/震荡）。</summary>
-    private static string RegimeLabel(double? adx) => adx switch
+    private static string RegimeLabel(decimal? adx) => adx switch
     {
         null => "早期样本(未记录状态)",
         >= 25 => "趋势市 ADX≥25",
@@ -233,8 +233,8 @@ internal static class RestEndpoints
             .ToList();
     }
 
-    private static double Rate(IEnumerable<SignalJournalEntry> items, Func<SignalJournalEntry, bool> predicate) =>
-        items.Count(predicate) / (double)items.Count();
+    private static decimal Rate(IEnumerable<SignalJournalEntry> items, Func<SignalJournalEntry, bool> predicate) =>
+        items.Count(predicate) / (decimal)items.Count();
 
     private static IResult BadRequest(string? message) =>
         Results.Json(new { error = message ?? "请求无效" }, statusCode: 400);

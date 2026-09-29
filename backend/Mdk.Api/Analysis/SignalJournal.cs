@@ -1,5 +1,6 @@
 using System.Text.Json;
 using System.Text.Json.Serialization;
+using Mdk.Api.Domain;
 
 namespace Mdk.Api.Analysis;
 
@@ -8,10 +9,10 @@ public sealed class SignalOutcome
 {
     /// <summary>ok=已评估；expired=信号过旧超出可用K线范围，无法评估。</summary>
     [JsonPropertyName("status")] public string Status { get; set; } = "ok";
-    [JsonPropertyName("ret")] public double? Ret { get; set; }
-    [JsonPropertyName("excess")] public double? Excess { get; set; }
-    [JsonPropertyName("mfe")] public double? Mfe { get; set; }
-    [JsonPropertyName("mae")] public double? Mae { get; set; }
+    [JsonPropertyName("ret")] public decimal? Ret { get; set; }
+    [JsonPropertyName("excess")] public decimal? Excess { get; set; }
+    [JsonPropertyName("mfe")] public decimal? Mfe { get; set; }
+    [JsonPropertyName("mae")] public decimal? Mae { get; set; }
     [JsonPropertyName("stopHit")] public bool? StopHit { get; set; }
     [JsonPropertyName("netPositive")] public bool? NetPositive { get; set; }
     [JsonPropertyName("evaluatedAt")] public long? EvaluatedAt { get; set; }
@@ -27,18 +28,18 @@ public sealed class SignalJournalEntry
     [JsonPropertyName("source")] public string Source { get; set; } = "";
     [JsonPropertyName("side")] public string Side { get; set; } = "";
     [JsonPropertyName("time")] public long Time { get; set; }
-    [JsonPropertyName("price")] public double Price { get; set; }
+    [JsonPropertyName("price")] public decimal Price { get; set; }
     /// <summary>信号说明原文（含位点价位/触碰次数等，便于事后审计）。</summary>
     [JsonPropertyName("note")] public string? Note { get; set; }
-    [JsonPropertyName("stopPrice")] public double? StopPrice { get; set; }
+    [JsonPropertyName("stopPrice")] public decimal? StopPrice { get; set; }
     [JsonPropertyName("trendAligned")] public bool? TrendAligned { get; set; }
     /// <summary>级别共振标签（aligned/counter/none，仅缠论信号）。</summary>
     [JsonPropertyName("confluence")] public string? Confluence { get; set; }
     [JsonPropertyName("isConfirmed")] public bool IsConfirmed { get; set; }
     /// <summary>信号发生时的市场状态（用于按状态分组统计，如 ADX≥25 的趋势市 vs 震荡市）。</summary>
-    [JsonPropertyName("adx")] public double? Adx { get; set; }
-    [JsonPropertyName("atrPct")] public double? AtrPct { get; set; }
-    [JsonPropertyName("bandwidthPct")] public double? BandwidthPct { get; set; }
+    [JsonPropertyName("adx")] public decimal? Adx { get; set; }
+    [JsonPropertyName("atrPct")] public decimal? AtrPct { get; set; }
+    [JsonPropertyName("bandwidthPct")] public decimal? BandwidthPct { get; set; }
     [JsonPropertyName("recordedAt")] public long RecordedAt { get; set; }
     /// <summary>来源：live=部署后在线记录；backfill=历史回填（事后一次性生成，存在事后挑选风险，统计时需区分）。</summary>
     [JsonPropertyName("origin")] public string Origin { get; set; } = "live";
@@ -51,7 +52,11 @@ public sealed class SignalJournalEntry
 /// </summary>
 public sealed class SignalJournal
 {
-    private static readonly JsonSerializerOptions JsonOpts = new(JsonSerializerDefaults.Web);
+    // 与 HTTP/WS 同口径：decimal 去尾随零与伪精度，避免 JSONL 被 28 位除法残渣撑大
+    private static readonly JsonSerializerOptions JsonOpts = new(JsonSerializerDefaults.Web)
+    {
+        Converters = { new DecimalJsonConverter(), new NullableDecimalJsonConverter() },
+    };
     private readonly Lock _sync = new();
     private readonly string _filePath;
     private readonly List<SignalJournalEntry> _entries = [];
@@ -120,16 +125,16 @@ public sealed record SignalSourceStats(
     string Source,
     int N,
     int NEpisodes,
-    double WinRate,
-    double AvgReturn,
-    double AvgExcess,
-    double NetPositiveRate,
-    double StopHitRate,
+    decimal WinRate,
+    decimal AvgReturn,
+    decimal AvgExcess,
+    decimal NetPositiveRate,
+    decimal StopHitRate,
     string Grade,
     /// <summary>分级依据说明（不达标时给出具体原因，便于前端展示与自查）。</summary>
     string GradeReason,
     /// <summary>集中度：样本最多的单一标的占比（0~1），用于识别"靠单个标的的行情撑起统计"。</summary>
-    double TopSymbolShare,
+    decimal TopSymbolShare,
     /// <summary>其中来自历史回填的样本数（事后生成，参考价值低于在线样本）。</summary>
     int NBackfill);
 
@@ -138,9 +143,9 @@ public sealed record SignalSourceStats(
 public sealed record SignalBucketStats(
     string Label,
     int N,
-    double WinRate,
-    double AvgExcess,
-    double NetPositiveRate);
+    decimal WinRate,
+    decimal AvgExcess,
+    decimal NetPositiveRate);
 
 public sealed record SignalStatsResponse(
     int TotalEvaluated,

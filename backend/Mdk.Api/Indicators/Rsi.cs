@@ -3,27 +3,26 @@ namespace Mdk.Api.Indicators;
 /// <summary>
 /// RSI（Relative Strength Index），Wilder 1978。
 /// 涨幅均值与跌幅均值分别做 Wilder 平滑（周期 14），RSI = 100 − 100/(1+RS)。
-/// 输出与 closes 等长；首个有效值在下标 period 处（需要 period 个涨跌差），之前为 NaN。
+/// 输出与 closes 等长；首个有效值在下标 period 处（需要 period 个涨跌差），之前为 null。
 /// </summary>
 public static class Rsi
 {
-    public static double[] Compute(IReadOnlyList<double> closes, int period = 14)
+    public static decimal?[] Compute(IReadOnlyList<decimal> closes, int period = 14)
     {
         var n = closes.Count;
-        var result = new double[n];
-        Array.Fill(result, double.NaN);
+        var result = new decimal?[n];
         if (period < 1 || n <= period) return result;
 
-        var gains = new double[n];
-        var losses = new double[n];
+        var gains = new decimal[n];
+        var losses = new decimal[n];
         for (var i = 1; i < n; i++)
         {
             var change = closes[i] - closes[i - 1];
-            gains[i] = change > 0 ? change : 0;
-            losses[i] = change < 0 ? -change : 0;
+            gains[i] = change > 0 ? change : 0m;
+            losses[i] = change < 0 ? -change : 0m;
         }
 
-        double avgGain = 0, avgLoss = 0;
+        decimal avgGain = 0, avgLoss = 0;
         for (var i = 1; i <= period; i++)
         {
             avgGain += gains[i];
@@ -42,12 +41,12 @@ public static class Rsi
         return result;
     }
 
-    private static double Value(double avgGain, double avgLoss)
+    private static decimal Value(decimal avgGain, decimal avgLoss)
     {
         // 无下跌（含全平盘的退化情形）时按惯例给出满值
-        if (avgLoss == 0) return 100;
+        if (avgLoss == 0m) return 100m;
         var rs = avgGain / avgLoss;
-        return 100 - 100 / (1 + rs);
+        return 100m - 100m / (1m + rs);
     }
 }
 
@@ -58,18 +57,17 @@ public static class Rsi
 /// </summary>
 public static class Atr
 {
-    public static double[] Compute(
-        IReadOnlyList<double> highs,
-        IReadOnlyList<double> lows,
-        IReadOnlyList<double> closes,
+    public static decimal?[] Compute(
+        IReadOnlyList<decimal> highs,
+        IReadOnlyList<decimal> lows,
+        IReadOnlyList<decimal> closes,
         int period = 14)
     {
         var n = closes.Count;
-        var result = new double[n];
-        Array.Fill(result, double.NaN);
+        var result = new decimal?[n];
         if (period < 1 || n < period) return result;
 
-        var tr = new double[n];
+        var tr = new decimal[n];
         tr[0] = highs[0] - lows[0];
         for (var i = 1; i < n; i++)
             tr[i] = Math.Max(
@@ -78,7 +76,7 @@ public static class Atr
                     Math.Abs(highs[i] - closes[i - 1]),
                     Math.Abs(lows[i] - closes[i - 1])));
 
-        double sum = 0;
+        decimal sum = 0;
         for (var i = 0; i < period; i++) sum += tr[i];
         var atr = sum / period;
         result[period - 1] = atr;

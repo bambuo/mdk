@@ -12,10 +12,14 @@ namespace Mdk.Api.Endpoints;
 
 internal static class WsEndpoints
 {
-    /// <summary>WS 消息统一序列化配置（camelCase + TradingPair 连写 + 枚举小写）。</summary>
+    /// <summary>WS 消息统一序列化配置（camelCase + TradingPair 连写 + 枚举小写 + decimal 去伪精度）。</summary>
     public static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web)
     {
-        Converters = { new TradingPairJsonConverter(), new JsonStringEnumConverter(JsonNamingPolicy.CamelCase, allowIntegerValues: false) },
+        Converters =
+        {
+            new TradingPairJsonConverter(), new DecimalJsonConverter(), new NullableDecimalJsonConverter(),
+            new JsonStringEnumConverter(JsonNamingPolicy.CamelCase, allowIntegerValues: false),
+        },
     };
 
     public static void Map(WebApplication app)

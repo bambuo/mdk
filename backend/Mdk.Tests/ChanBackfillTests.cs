@@ -81,17 +81,17 @@ public static class ChanBackfillTests
     /// <summary>构造"前置温区 → 通道 → 突破回抽"的合成行情（与界面测试同款几何）。</summary>
     private static (List<Candle> Main, ChanOptions Options) BuildHistory()
     {
-        var levels = new List<double>();
-        void Leg(double from, double to, int bars)
+        var levels = new List<decimal>();
+        void Leg(decimal from, decimal to, int bars)
         {
             for (var k = 1; k <= bars; k++) levels.Add(from + (to - from) * k / bars);
         }
         // 前置温区：14 轮（224 根），保证后续结构落在内部窗口预热之后
-        for (var r = 0; r < 14; r++) { Leg(95, 99, 8); Leg(99, 95.5, 8); }
-        for (var r = 0; r < 5; r++) { Leg(100, 104, 10); Leg(104, 100.5, 10); } // 通道（形成中枢）
-        Leg(100.5, 108, 8);    // 突破
-        Leg(108, 105.5, 8);    // 回抽不回中枢 → 3 买
-        Leg(105.5, 112, 8);
+        for (var r = 0; r < 14; r++) { Leg(95, 99, 8); Leg(99, 95.5m, 8); }
+        for (var r = 0; r < 5; r++) { Leg(100, 104, 10); Leg(104, 100.5m, 10); } // 通道（形成中枢）
+        Leg(100.5m, 108, 8);    // 突破
+        Leg(108, 105.5m, 8);    // 回抽不回中枢 → 3 买
+        Leg(105.5m, 112, 8);
         Leg(112, 107, 8);
         Leg(107, 114, 8);
         Leg(114, 109, 8);
@@ -100,7 +100,7 @@ public static class ChanBackfillTests
         var main = new List<Candle>();
         var time = 6_000_000L;
         for (var i = 0; i < levels.Count; i++)
-            main.Add(new Candle(time + i * 3600L, levels[i], levels[i] + 0.5, levels[i] - 0.5, levels[i], 10));
+            main.Add(new Candle(time + i * 3600L, levels[i], levels[i] + 0.5m, levels[i] - 0.5m, levels[i], 10));
 
         var options = new ChanOptions
         {

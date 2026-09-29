@@ -182,9 +182,9 @@ public sealed class BinanceRestClient
         throw new BinanceException((int)response.StatusCode, message);
     }
 
-    private static double Num(JsonElement e) => double.Parse(e.GetString()!, CultureInfo.InvariantCulture);
+    private static decimal Num(JsonElement e) => decimal.Parse(e.GetString()!, CultureInfo.InvariantCulture);
 
-    private static double D(string s) => double.Parse(s, CultureInfo.InvariantCulture);
+    private static decimal D(string s) => decimal.Parse(s, CultureInfo.InvariantCulture);
 
     private sealed class TickerRaw
     {

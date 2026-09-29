@@ -11,16 +11,16 @@ public readonly record struct ChanSegment(
     int StartStrokeIndex,
     int EndStrokeIndex,
     int StartBarIndex,
-    double StartPrice,
+    decimal StartPrice,
     int EndBarIndex,
-    double EndPrice,
+    decimal EndPrice,
     bool IsUp,
     bool IsConfirmed,
     int? StableFromBarIndex)
 {
-    public double High => Math.Max(StartPrice, EndPrice);
+    public decimal High => Math.Max(StartPrice, EndPrice);
 
-    public double Low => Math.Min(StartPrice, EndPrice);
+    public decimal Low => Math.Min(StartPrice, EndPrice);
 
     public int StrokeCount => EndStrokeIndex - StartStrokeIndex + 1;
 

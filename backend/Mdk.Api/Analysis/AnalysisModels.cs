@@ -7,7 +7,7 @@ namespace Mdk.Api.Analysis;
 public sealed record TrendResult(string Direction, int Score, IReadOnlyList<string> Reasons);
 
 /// <summary>关键价格点位。Kind：support=支撑（现价下方），resistance=阻力（现价上方）。</summary>
-public sealed record PriceLevel(string Kind, double Price, int Strength, double DistancePct);
+public sealed record PriceLevel(string Kind, decimal Price, int Strength, decimal DistancePct);
 
 /// <summary>
 /// 买卖点信号。Side：buy=买点（做多），sell=卖点（做空）。
@@ -19,31 +19,31 @@ public sealed record TradeSignal(
     long Time,
     string Side,
     string Source,
-    double Price,
+    decimal Price,
     string Note,
-    double? StopPrice,
+    decimal? StopPrice,
     bool IsConfirmed,
     bool? TrendAligned,
-    double? Adx = null,
-    double? AtrPct = null,
-    double? BandwidthPct = null,
+    decimal? Adx = null,
+    decimal? AtrPct = null,
+    decimal? BandwidthPct = null,
     /// <summary>级别共振标签：aligned=窗口内有同向高周期缠论信号，counter=只有反向，none=无（仅缠论信号有值）。</summary>
     string? Confluence = null);
 
 /// <summary>信号发生时的市场状态快照。</summary>
-public readonly record struct SignalRegime(double? Adx, double? AtrPct, double? BandwidthPct);
+public readonly record struct SignalRegime(decimal? Adx, decimal? AtrPct, decimal? BandwidthPct);
 
 /// <summary>已确认的历史摆动点（用于结构信号，避免使用未来数据）。</summary>
-public readonly record struct SwingPoint(int Index, double Price, bool IsHigh);
+public readonly record struct SwingPoint(int Index, decimal Price, bool IsHigh);
 
-public sealed record MacdSeries(double?[] Dif, double?[] Dea, double?[] Hist);
+public sealed record MacdSeries(decimal?[] Dif, decimal?[] Dea, decimal?[] Hist);
 
 /// <summary>一个中枢的区间信息（供前端绘制中枢色带与列表）。</summary>
 public sealed record ChanPivotInfo(
     long FromTime,
     long ToTime,
-    double Zg,
-    double Zd,
+    decimal Zg,
+    decimal Zd,
     int Strokes,
     bool IsConfirmed,
     /// <summary>是否落在某个高周期中枢内（多级别归属，仅本级别中枢有值）。</summary>
@@ -67,8 +67,8 @@ public sealed record ChanContextSummary(
     string Interval,
     string LastStrokeDirection,
     bool? PriceInPivot,
-    double? PivotZg,
-    double? PivotZd,
+    decimal? PivotZg,
+    decimal? PivotZd,
     string? LastKind,
     string? LastSide,
     long? LastTime,
@@ -80,13 +80,13 @@ public sealed record ChanSummary(
     bool LastStrokeConfirmed,
     int StrokeCount,
     int PivotCount,
-    double? PivotZg,
-    double? PivotZd,
+    decimal? PivotZg,
+    decimal? PivotZd,
     int PivotStrokes,
     bool? PriceInPivot,
     string? LastKind,
     long? LastTime,
-    double? LastPrice,
+    decimal? LastPrice,
     string? LastNote,
     IReadOnlyList<ChanPivotInfo> Pivots,
     /// <summary>高周期结构上下文（无高周期数据时为 null）。</summary>
@@ -104,11 +104,11 @@ public sealed record AnalysisResult(
     string QuoteAsset,
     string Interval,
     long LastTime,
-    double LastPrice,
+    decimal LastPrice,
     TrendResult Trend,
     IReadOnlyList<PriceLevel> Levels,
     IReadOnlyList<TradeSignal> Signals,
-    IReadOnlyDictionary<string, double?[]> Series,
+    IReadOnlyDictionary<string, decimal?[]> Series,
     MacdSeries Macd,
     ChanSummary? Chan = null,
     /// <summary>多级别结构（高周期 / 本级别 / 次级别）；无对应数据时该级别缺省。</summary>
@@ -126,8 +126,8 @@ public sealed record SymbolQuote(
     string Symbol,
     string BaseAsset,
     string QuoteAsset,
-    double LastPrice,
-    double PriceChangePercent,
-    double QuoteVolume);
+    decimal LastPrice,
+    decimal PriceChangePercent,
+    decimal QuoteVolume);
 
-public sealed record Ticker24h(string Symbol, double LastPrice, double PriceChangePercent, double QuoteVolume);
+public sealed record Ticker24h(string Symbol, decimal LastPrice, decimal PriceChangePercent, decimal QuoteVolume);

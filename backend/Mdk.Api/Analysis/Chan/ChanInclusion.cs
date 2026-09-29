@@ -30,7 +30,7 @@ public static class ChanInclusion
 
             if (contains)
             {
-                double high, low;
+                decimal high, low;
                 if (last.IsUp)
                 {
                     high = Math.Max(last.High, bar.High);

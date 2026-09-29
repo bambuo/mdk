@@ -14,7 +14,7 @@ public sealed class ChanOptions
     public string StrokeMode { get; set; } = "Loose";
 
     /// <summary>背驰判定阈值：离开段 MACD 面积 / 进入段面积 低于该值视为背驰。</summary>
-    public double DivergenceAreaRatio { get; set; } = 0.9;
+    public decimal DivergenceAreaRatio { get; set; } = 0.9m;
 
     /// <summary>返回给前端的最多买卖点数量（取最近者，防止超长窗口下响应过大）。</summary>
     public int MaxPoints { get; set; } = 50;

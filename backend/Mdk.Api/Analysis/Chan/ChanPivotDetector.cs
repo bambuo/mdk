@@ -59,6 +59,6 @@ public static class ChanPivotDetector
         return pivots;
     }
 
-    private static bool EndInside(ChanStroke stroke, double zd, double zg) =>
+    private static bool EndInside(ChanStroke stroke, decimal zd, decimal zg) =>
         stroke.EndPrice >= zd && stroke.EndPrice <= zg;
 }

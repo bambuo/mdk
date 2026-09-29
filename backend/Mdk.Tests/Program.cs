@@ -12,6 +12,7 @@ public static class Program
 
         var kit = new TestKit();
         TradingPairTests.Register(kit);
+        DecimalJsonTests.Register(kit);
         WilderSmoothingTests.Register(kit);
         RsiTests.Register(kit);
         AtrTests.Register(kit);

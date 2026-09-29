@@ -10,8 +10,8 @@ public static class ChanAnalyzer
 {
     public static ChanResult Analyze(
         IReadOnlyList<Candle> candles,
-        double[] macdHist,
-        double[] atr,
+        decimal?[] macdHist,
+        decimal?[] atr,
         ChanOptions options,
         IReadOnlyList<Candle>? subLevelCandles = null,
         string? subLevelInterval = null)
@@ -52,7 +52,7 @@ public static class ChanAnalyzer
         var series = BuildSeries(candles.Count, fractals, strokes, pivots);
         if (useSegments)
         {
-            var segLine = new double?[candles.Count];
+            var segLine = new decimal?[candles.Count];
             foreach (var seg in segments)
             {
                 if (seg.StartBarIndex >= 0 && seg.StartBarIndex < candles.Count) segLine[seg.StartBarIndex] = seg.StartPrice;
@@ -103,7 +103,7 @@ public static class ChanAnalyzer
     }
 
     /// <summary>生成图表用稀疏序列：笔折线（端点）、分型点、最新中枢上下沿（覆盖该中枢区间）。</summary>
-    private static Dictionary<string, double?[]> BuildSeries(
+    private static Dictionary<string, decimal?[]> BuildSeries(
         int barCount,
         IReadOnlyList<ChanFractal> fractals,
         IReadOnlyList<ChanStroke> strokes,
@@ -139,7 +139,7 @@ public static class ChanAnalyzer
             }
         }
 
-        return new Dictionary<string, double?[]>(StringComparer.Ordinal)
+        return new Dictionary<string, decimal?[]>(StringComparer.Ordinal)
         {
             ["chanStroke"] = stroke,
             ["chanFractalTop"] = top,
@@ -149,5 +149,5 @@ public static class ChanAnalyzer
         };
     }
 
-    private static double?[] NewSeries(int length) => new double?[length];
+    private static decimal?[] NewSeries(int length) => new decimal?[length];
 }
