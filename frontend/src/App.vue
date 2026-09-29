@@ -108,16 +108,22 @@ async function loadSymbols() {
   }
 }
 
+// 请求序号：快速切换（含线段开关）时，只接受"最后一次请求"的结果，避免先发后到覆盖新状态
+let reloadSeq = 0
+
 async function reload() {
+  const seq = ++reloadSeq
   loading.value = true
   errorMsg.value = ''
   const requestedMarket = market.value
   const requestedSymbol = symbol.value
   const requestedInterval = interval.value
+  const requestedSegments = toggles.value.segments
   try {
     const [klines, result] = await Promise.all([
       fetchKlines(requestedMarket, requestedSymbol, requestedInterval),
-      fetchAnalysis(requestedMarket, requestedSymbol, requestedInterval),
+      // 必须带上结构模式：否则 REST 会返回笔模式并覆盖 WS 推来的线段模式结果（界面表现为"开关时灵时不灵"）
+      fetchAnalysis(requestedMarket, requestedSymbol, requestedInterval, 500, requestedSegments),
     ])
     // 忽略过期响应（用户已切换市场/币种/周期）
     if (market.value !== requestedMarket || symbol.value !== requestedSymbol || interval.value !== requestedInterval) return
@@ -125,15 +131,13 @@ async function reload() {
     analysis.value = result
     livePrice.value = result.lastPrice
   } catch (err) {
-    if (market.value !== requestedMarket || symbol.value !== requestedSymbol || interval.value !== requestedInterval) return
+    if (seq !== reloadSeq) return
     errorMsg.value = err instanceof Error ? err.message : String(err)
     candles.value = []
     analysis.value = null
     livePrice.value = null
   } finally {
-    if (market.value === requestedMarket && symbol.value === requestedSymbol && interval.value === requestedInterval) {
-      loading.value = false
-    }
+    if (seq === reloadSeq) loading.value = false
   }
 }
 

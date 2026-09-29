@@ -502,6 +502,9 @@ watch(
     applyOverlayLines()
     applyLevels()
     applyMarkers()
+    // 可见性/线宽取决于 levelMode（线段模式：线段为主、笔降为细线），
+    // 因此分析结果更新后必须重跑一次，否则切换线段后图层样式不会跟着变
+    applyVisibility()
   },
 )
 watch(() => props.toggles, applyVisibility, { deep: true })
