@@ -109,6 +109,35 @@ public static class ChanSegmentTests
             }
         });
 
+
+        t.Case("线段_边界情形_极值在首笔时段延伸到分型破坏点（口径B）", () =>
+        {
+            // 复刻真实案例（BTC 1h）：下降段首笔即创段内最低，之后各次反弹均未破该低点；
+            // 特征序列（向上笔）的分型要求"中元素的最低点低于左右"，而紧邻最低点的那笔反弹以最低点开盘，
+            // 任何分型的"中元素"都不可能低于它 → 破坏点只能更晚确认 → 段终点高于段内极值。口径 B：保持本规则。
+            var strokes = MakeStrokes(
+                100, 60,   // s0 首笔：段内最低 60
+                70, 65,    // s1↑(60→70) e1=[60,70]；s2↓
+                90, 63,    // s3↑(65→90) e2=[65,90]；s4↓
+                80, 67,    // s5↑(63→80) e3=[63,80]（最低的反弹=分型中元素）；s6↓
+                95);       // s7↑(67→95) e4=[67,95] → (e2,e3,e4) 构成底分型 → 破坏确认
+            var segments = ChanSegmentBuilder.Build(strokes);
+
+            var first = segments[0];
+            Assert.Equal(true, first.IsConfirmed);
+            Assert.Equal(false, first.IsUp);
+            Assert.Equal(5, first.StrokeCount);        // 笔0..4
+            Assert.Equal(63, first.EndPrice, 6);       // 终点 = 分型中元素前一笔的终点
+
+            // 段内真实最低（首笔的 60）低于终点（63）—— ChanSegment 只记录两端点，
+            // 段内极值需由构成该段的笔来体现；这正是"端点非段内极值"这一已知边界情形。
+            var span = strokes.Skip(first.StartStrokeIndex).Take(first.StrokeCount).ToList();
+            var spanLow = span.Min(x => Math.Min(x.StartPrice, x.EndPrice));
+            Assert.Equal(60, spanLow, 6);
+            Assert.True(spanLow < first.EndPrice, "本情形下段内极值低于终点（口径 B，见构建器类注释）");
+            Assert.Equal(63, first.Low, 6);            // Low 为两端点极值（非段内极值）
+        });
+
         t.Case("线段_不足三笔时不产出", () =>
         {
             var strokes = MakeStrokes(0, 10, 5);   // 仅两笔
