@@ -90,7 +90,11 @@ public sealed record ChanSummary(
     string? LastNote,
     IReadOnlyList<ChanPivotInfo> Pivots,
     /// <summary>高周期结构上下文（无高周期数据时为 null）。</summary>
-    ChanContextSummary? HigherContext = null);
+    ChanContextSummary? HigherContext = null,
+    /// <summary>结构模式：stroke=笔中枢（默认）/ segment=线段中枢。</summary>
+    string LevelMode = "stroke",
+    /// <summary>线段数量（stroke 模式下为 0）。</summary>
+    int SegmentCount = 0);
 
 /// <summary>一次完整的分析结果（REST /api/analysis 与 WS analysis 推送共用此结构）。</summary>
 public sealed record AnalysisResult(

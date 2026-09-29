@@ -90,7 +90,7 @@ internal static class RestEndpoints
             .WithSummary("K线快照（秒级时间戳 + OHLCV）");
 
         app.MapGet("/api/analysis", async (
-                string? market, string? symbol, string? interval, int? limit,
+                string? market, string? symbol, string? interval, int? limit, bool? segments,
                 SymbolCatalog catalog, AnalysisService analysisService, CancellationToken ct) =>
             {
                 var (marketKind, pair, error) = await PairResolver.ResolveAsync(symbol, market, catalog, ct);
@@ -100,7 +100,7 @@ internal static class RestEndpoints
                 var take = Math.Clamp(limit ?? 500, 250, 1000);
                 try
                 {
-                    var result = await analysisService.AnalyzeAsync(marketKind, pair.Value, interval, take, ct);
+                    var result = await analysisService.AnalyzeAsync(marketKind, pair.Value, interval, take, ct, segments);
                     return Results.Ok(result);
                 }
                 catch (BinanceException ex)
@@ -108,7 +108,7 @@ internal static class RestEndpoints
                     return UpstreamError(ex);
                 }
             })
-            .WithSummary("趋势方向 + 关键点位 + 买卖点信号 + 指标序列");
+            .WithSummary("趋势方向 + 关键点位 + 买卖点信号 + 指标序列（segments=true 启用线段中枢）");
 
         app.MapPost("/api/backfill/run", async (
                 string? market, int? days, string? symbols, string? intervals, bool? subLevel,

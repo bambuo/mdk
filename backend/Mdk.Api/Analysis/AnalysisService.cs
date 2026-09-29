@@ -29,13 +29,16 @@ public sealed class AnalysisService(
             .Select(v => (v.Market, v.Pair, v.Interval))
             .ToList();
 
-    public async Task<AnalysisResult> AnalyzeAsync(MarketKind market, TradingPair pair, string interval, int limit, CancellationToken ct = default)
+    public async Task<AnalysisResult> AnalyzeAsync(
+        MarketKind market, TradingPair pair, string interval, int limit, CancellationToken ct = default,
+        bool? useSegments = null)
     {
         _recent[$"{market}|{pair.Symbol}|{interval}"] = (market, pair, interval, DateTimeOffset.UtcNow);
+        var chanOptions = useSegments is null ? _chanOptions : _chanOptions.Clone(useSegments: useSegments);
 
         // 缠论使用固定内部窗口（最近 AnalysisBars 根），与显示窗口解耦——保证结构与信号可复现；
         // 因此取数上限需覆盖两者中较大者。
-        var chanBars = _chanOptions.Enabled ? _chanOptions.AnalysisBars : 0;
+        var chanBars = chanOptions.Enabled ? chanOptions.EffectiveAnalysisBars : 0;
         var fetchBars = Math.Clamp(Math.Max(limit, chanBars), 250, 1500);
         var fetched = await rest.GetKlinesAsync(market, pair, interval, fetchBars, ct);
         if (fetched.Length == 0)
@@ -60,7 +63,7 @@ public sealed class AnalysisService(
         // 次级别（下一档周期）数据：用于缠论买卖点的"次级别确认"；失败不阻塞主分析
         IReadOnlyList<Models.Candle>? subLevel = null;
         var subLevelInterval = MarketIntervals.LowerInterval(interval);
-        if (_chanOptions.Enabled && _chanOptions.RequireSubLevelConfirm && subLevelInterval != null)
+        if (chanOptions.Enabled && chanOptions.RequireSubLevelConfirm && subLevelInterval != null)
         {
             try
             {
@@ -75,7 +78,7 @@ public sealed class AnalysisService(
         // 多级别结构：次级别数据需覆盖"显示窗口 + 预热"，用于在图上叠加更细粒度的中枢
         IReadOnlyList<Models.Candle>? lowerLevel = null;
         var lowerLevelInterval = MarketIntervals.LowerInterval(interval);
-        if (_chanOptions.Enabled && _chanOptions.MultiLevel && lowerLevelInterval != null)
+        if (chanOptions.Enabled && chanOptions.MultiLevel && lowerLevelInterval != null)
         {
             try
             {
@@ -88,7 +91,7 @@ public sealed class AnalysisService(
         }
 
         var result = AnalysisEngine.Compute(market, pair, interval, candles, _signalOptions, htf, htfInterval,
-            _chanOptions, chanWindow, subLevel, subLevelInterval, lowerLevel, lowerLevelInterval);
+            chanOptions, chanWindow, subLevel, subLevelInterval, lowerLevel, lowerLevelInterval);
         RecordSignals(market, pair, interval, result);
         return result;
     }
@@ -163,7 +166,7 @@ public sealed class AnalysisService(
             return hit.Candles;
 
         // 与缠论内部窗口同口径（回填与在线需一致），至少 260 根
-        var bars = Math.Max(260, _chanOptions.AnalysisBars);
+        var bars = Math.Max(260, _chanOptions.EffectiveAnalysisBars);
         var candles = await rest.GetKlinesAsync(market, pair, htfInterval, Math.Min(1000, bars), ct);
         _htfCache[key] = (candles, DateTimeOffset.UtcNow);
         return candles;

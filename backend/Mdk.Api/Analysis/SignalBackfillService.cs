@@ -148,7 +148,7 @@ public sealed class SignalBackfillService(
         bool subLevelConfirm = true)
     {
         var barSeconds = MarketIntervals.IntervalSeconds(interval);
-        var windowBars = Math.Max(120, _chanOptions.AnalysisBars);
+        var windowBars = Math.Max(120, _chanOptions.EffectiveAnalysisBars);
         var now = DateTimeOffset.UtcNow.ToUnixTimeSeconds();
         var toSec = now;
         // 需要 windowBars 根预热历史，才能从 (now - days) 起逐根复算

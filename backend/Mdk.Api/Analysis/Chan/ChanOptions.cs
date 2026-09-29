@@ -51,6 +51,24 @@ public sealed class ChanOptions
     /// </summary>
     public int ConfluenceWindowBars { get; set; } = 1;
 
+    /// <summary>
+    /// 是否启用**线段**（完整缠论体系）：开启后中枢由线段构成（线段中枢 = 三线段重叠），
+    /// 1/2/3 类买卖点也基于线段（段级背驰比较，替代笔级）；关闭则维持"笔中枢"机制。
+    /// 线段按特征序列法构建（见 ChanSegmentBuilder），最小三笔、只能被线段破坏、含缺口两种破坏。
+    /// </summary>
+    public bool UseSegments { get; set; }
+
+
+    /// <summary>
+    /// 线段模式下的内部窗口根数（默认 1200）。
+    /// 线段刻画的是"趋势腿"：一段可以跨越几十上百笔，窗口太短时线段的破坏点常常落在窗口之外，
+    /// 导致"只剩一两条未确认线段、几乎没有线段中枢"。实测 700 根 → 3 段/0 中枢；1500 根 → 9 段/2 中枢。
+    /// </summary>
+    public int SegmentAnalysisBars { get; set; } = 1200;
+
+    /// <summary>实际使用的内部窗口：线段模式自动放宽（各模式各自的窗口都是固定的，可复现性不受影响）。</summary>
+    public int EffectiveAnalysisBars => UseSegments ? Math.Max(AnalysisBars, SegmentAnalysisBars) : AnalysisBars;
+
     /// <summary>是否计算并返回多级别结构（高周期/本级别/次级别同级叠加显示）。</summary>
     public bool MultiLevel { get; set; } = true;
 
@@ -58,7 +76,8 @@ public sealed class ChanOptions
     public int LowerLevelMinBars { get; set; } = 300;
 
     /// <summary>复制一份（可覆盖个别开关）。用于"关闭次级别确认"等变体，避免手写复制导致字段漏配。</summary>
-    public ChanOptions Clone(bool? requireSubLevelConfirm = null, bool? multiLevel = null) => new()
+    public ChanOptions Clone(
+        bool? requireSubLevelConfirm = null, bool? multiLevel = null, bool? useSegments = null) => new()
     {
         Enabled = Enabled,
         StrokeMode = StrokeMode,
@@ -70,6 +89,8 @@ public sealed class ChanOptions
         SubLevelConfirmWindowBars = SubLevelConfirmWindowBars,
         ConfluenceWindowBars = ConfluenceWindowBars,
         MultiLevel = multiLevel ?? MultiLevel,
+        UseSegments = useSegments ?? UseSegments,
+        SegmentAnalysisBars = SegmentAnalysisBars,
         LowerLevelMinBars = LowerLevelMinBars,
     };
 

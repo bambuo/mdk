@@ -142,7 +142,14 @@ function sideColor(side: string) {
     <section v-if="analysis.chan" class="card">
       <h3 class="card-title">
         缠论结构
-        <span class="card-sub">{{ analysis.chan.strokeCount }} 笔 · {{ analysis.chan.pivotCount }} 中枢</span>
+        <span class="card-sub">
+          <template v-if="analysis.chan.levelMode === 'segment'">
+            {{ analysis.chan.segmentCount }} 段 · {{ analysis.chan.pivotCount }} 线段中枢
+          </template>
+          <template v-else>
+            {{ analysis.chan.strokeCount }} 笔 · {{ analysis.chan.pivotCount }} 笔中枢
+          </template>
+        </span>
       </h3>
       <div class="chan-grid">
         <span class="k">当前笔</span>
@@ -209,6 +216,11 @@ function sideColor(side: string) {
         </p>
       </div>
 
+      <!-- 线段模式：窗口内可能没有线段中枢（线段刻画趋势腿，一段可跨越数百根） -->
+      <div v-if="analysis.chan.levelMode === 'segment' && !analysis.chan.pivots.length" class="lv-hint" style="margin-top: 6px">
+        当前窗口内尚无线段中枢：线段刻画"趋势腿"，一段可跨越数百根K线，需要更长的窗口或更明确的反转才会形成线段中枢。
+      </div>
+
       <!-- 中枢列表：缠论结构的核心，最近的在前 -->
       <div v-if="analysis.chan.pivots.length" class="chan-pivots">
         <div class="pivot-hd"><span>中枢区间</span><span>笔数</span><span>状态</span></div>
@@ -224,7 +236,15 @@ function sideColor(side: string) {
         </div>
       </div>
       <p v-if="analysis.chan.lastNote" class="chan-note">{{ analysis.chan.lastNote }}</p>
-      <p class="chan-hint">笔/中枢为笔级别结构，次级别用高一档周期近似；只有已确认结构才产生买卖点。</p>
+      <p class="chan-hint">
+        <template v-if="analysis.chan.levelMode === 'segment'">
+          线段模式：中枢由线段构成（三线段重叠），买卖点基于线段（段级背驰）；线段按特征序列法构建，最小三笔、只能被线段破坏。
+        </template>
+        <template v-else>
+          笔模式：中枢由笔构成（三笔重叠）；开启顶栏「线段」可切换为完整的线段体系。
+        </template>
+        只有已确认结构才产生买卖点。
+      </p>
     </section>
 
     <!-- 概念三：买卖点（含分级与历史绩效） -->

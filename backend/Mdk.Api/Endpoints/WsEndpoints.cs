@@ -21,7 +21,7 @@ internal static class WsEndpoints
     public static void Map(WebApplication app)
     {
         app.MapGet("/ws", async (
-                HttpContext context, string? market, string? symbol, string? interval,
+                HttpContext context, string? market, string? symbol, string? interval, bool? segments,
                 SymbolCatalog catalog, KlineStreamService streams, AnalysisService analysisService,
                 ILoggerFactory loggerFactory) =>
             {
@@ -40,7 +40,7 @@ internal static class WsEndpoints
 
                 var socket = await context.WebSockets.AcceptWebSocketAsync();
                 var handler = new KlineSocketHandler(
-                    marketKind, pair.Value, interval, streams, analysisService,
+                    marketKind, pair.Value, interval, streams, analysisService, segments,
                     loggerFactory.CreateLogger("KlineSocket"));
                 await handler.RunAsync(socket, context.RequestAborted);
                 return Results.Empty;
@@ -62,6 +62,7 @@ internal sealed class KlineSocketHandler(
     string interval,
     KlineStreamService streams,
     AnalysisService analysisService,
+    bool? useSegments,
     ILogger logger)
 {
     private static readonly TimeSpan AnalysisRefreshInterval = TimeSpan.FromSeconds(20);
@@ -163,7 +164,7 @@ internal sealed class KlineSocketHandler(
             }
             try
             {
-                var result = await analysisService.AnalyzeAsync(market, pair, interval, AnalysisKlineLimit, ct);
+                var result = await analysisService.AnalyzeAsync(market, pair, interval, AnalysisKlineLimit, ct, useSegments);
                 _outbound.Writer.TryWrite(JsonSerializer.Serialize(new WsEnvelope("analysis", result), WsEndpoints.JsonOptions));
             }
             catch (OperationCanceledException)

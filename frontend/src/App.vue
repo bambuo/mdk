@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { Message } from '@arco-design/web-vue'
-import { onMounted, ref, watch } from 'vue'
+import { computed, onMounted, ref, watch } from 'vue'
 import { fetchAnalysis, fetchKlines, fetchSignalStats, fetchSymbols } from './api/client'
 import { useKlineSocket } from './composables/useKlineSocket'
 import AnalysisPanel from './components/AnalysisPanel.vue'
@@ -18,6 +18,7 @@ const interval = ref('1h')
 const toggles = ref<Toggles>({
   chan: true,
   multiLevel: true,
+  segments: false,
   ema: true,
   rsi: true,
   macd: true,
@@ -149,7 +150,7 @@ async function loadSignalStats() {
   }
 }
 
-const { status } = useKlineSocket(market, symbol, interval, {
+const { status } = useKlineSocket(market, symbol, interval, computed(() => toggles.value.segments), {
   onKline: candle => {
     // 先更新价格徽标：即使图表更新异常，观感上的实时性也不受影响
     livePrice.value = candle.close
@@ -201,6 +202,9 @@ watch([symbol, interval], () => {
   reload()
   loadSignalStats()
 })
+
+// 结构模式切换（线段/笔）需要重新取数（WS 也会自动重连）
+watch(() => toggles.value.segments, () => reload())
 </script>
 
 <template>

@@ -100,7 +100,7 @@ public static class ChanBackfill
         var results = new List<LevelPoint>();
         if (history.Count == 0) return results;
 
-        var windowBars = Math.Max(120, options.AnalysisBars);
+        var windowBars = Math.Max(120, options.EffectiveAnalysisBars);
         const int subWindowBars = 300;
 
         for (var i = 0; i < history.Count; i++)

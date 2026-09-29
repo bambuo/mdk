@@ -107,6 +107,10 @@ export interface ChanSummary {
   lastPrice: number | null
   lastNote: string | null
   pivots: ChanPivotInfo[]
+  /** 结构模式：stroke=笔中枢（默认）/ segment=线段中枢 */
+  levelMode: 'stroke' | 'segment'
+  /** 线段数量（笔模式下为 0） */
+  segmentCount: number
   /** 高周期结构上下文（级别共振的依据） */
   higherContext: {
     interval: string
@@ -150,6 +154,8 @@ export interface Toggles {
   chan: boolean
   /** 多级别叠加：同时显示高周期与次级别中枢（宽/细色带） */
   multiLevel: boolean
+  /** 线段模式：以线段构建中枢与买卖点（完整缠论体系）；关闭则用笔中枢 */
+  segments: boolean
 }
 
 /** 单来源信号的历史绩效（事后评估，扣费口径见后端） */

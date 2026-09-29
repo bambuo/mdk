@@ -19,8 +19,13 @@ export function fetchKlines(market: MarketKind, symbol: string, interval: string
   return getJson<KlinesResponse>(`/api/klines?market=${market}&symbol=${encodeURIComponent(symbol)}&interval=${interval}&limit=${limit}`)
 }
 
-export function fetchAnalysis(market: MarketKind, symbol: string, interval: string, limit = 500): Promise<AnalysisResult> {
-  return getJson<AnalysisResult>(`/api/analysis?market=${market}&symbol=${encodeURIComponent(symbol)}&interval=${interval}&limit=${limit}`)
+export function fetchAnalysis(
+  market: MarketKind, symbol: string, interval: string, limit = 500, segments?: boolean,
+): Promise<AnalysisResult> {
+  const seg = segments == null ? '' : `&segments=${segments}`
+  return getJson<AnalysisResult>(
+    `/api/analysis?market=${market}&symbol=${encodeURIComponent(symbol)}&interval=${interval}&limit=${limit}${seg}`,
+  )
 }
 
 /** 信号历史绩效（事后评估；days 缺省 90） */

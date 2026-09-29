@@ -164,6 +164,8 @@ let bollLowerSeries: ISeriesApi<'Line'> | null = null
 // 信号用快慢线（1h 提速参数 10/30 时后端下发，虚线展示，与显示用 EMA20/50 区分）
 let emaSigFastSeries: ISeriesApi<'Line'> | null = null
 let emaSigSlowSeries: ISeriesApi<'Line'> | null = null
+// 线段图层（线段模式下为主线，笔降为细线）
+let chanSegmentSeries: ISeriesApi<'Line'> | null = null
 // 缠论图层：笔折线 + 中枢上下沿
 let chanStrokeSeries: ISeriesApi<'Line'> | null = null
 let chanZgSeries: ISeriesApi<'Line'> | null = null
@@ -232,6 +234,7 @@ function applyOverlayLines() {
   emaSigFastSeries?.setData(toLineData(a.series['emaSigFast']))
   emaSigSlowSeries?.setData(toLineData(a.series['emaSigSlow']))
   chanStrokeSeries?.setData(toLineData(a.series['chanStroke']))
+  chanSegmentSeries?.setData(toLineData(a.series['chanSegment']))
   // 中枢改用色带表达（原 chanZg/chanZd 折线保留为空数据，避免视觉重复）
   chanZgSeries?.setData([])
   chanZdSeries?.setData([])
@@ -342,7 +345,14 @@ function applyVisibility() {
   bollLowerSeries?.applyOptions({ visible: props.toggles.boll })
   emaSigFastSeries?.applyOptions({ visible: props.toggles.ema })
   emaSigSlowSeries?.applyOptions({ visible: props.toggles.ema })
-  chanStrokeSeries?.applyOptions({ visible: props.toggles.chan })
+  // 线段模式下：线段为主线（粗、亮），笔降为细线作参考；笔模式下沿用原样式
+  const segMode = props.toggles.segments && !!props.analysis?.chan?.levelMode && props.analysis.chan.levelMode === 'segment'
+  chanStrokeSeries?.applyOptions({
+    visible: props.toggles.chan,
+    lineWidth: segMode ? 1 : 2,
+    color: segMode ? 'rgba(232,192,125,0.45)' : '#e8c07d',
+  })
+  chanSegmentSeries?.applyOptions({ visible: props.toggles.chan && segMode })
   chanZgSeries?.applyOptions({ visible: props.toggles.chan })
   chanZdSeries?.applyOptions({ visible: props.toggles.chan })
   rsiSeries?.applyOptions({ visible: props.toggles.rsi })
@@ -438,6 +448,8 @@ onMounted(() => {
 
   // 缠论：笔折线（细实线）+ 中枢上下沿（细线，无价格轴标签以免与支撑阻力线冲突）
   chanStrokeSeries = chart.addSeries(LineSeries, { color: '#e8c07d', lineWidth: 2, priceLineVisible: false, lastValueVisible: false, crosshairMarkerVisible: false })
+  // 线段：更粗、更醒目的配色（线段模式下它是主结构）
+  chanSegmentSeries = chart.addSeries(LineSeries, { color: '#f0a050', lineWidth: 3, priceLineVisible: false, lastValueVisible: false, crosshairMarkerVisible: false })
   chanZgSeries = chart.addSeries(LineSeries, { color: 'rgba(198,120,221,0.55)', lineWidth: 1, lineStyle: LineStyle.Dotted, priceLineVisible: false, lastValueVisible: false, crosshairMarkerVisible: false })
   chanZdSeries = chart.addSeries(LineSeries, { color: 'rgba(198,120,221,0.55)', lineWidth: 1, lineStyle: LineStyle.Dotted, priceLineVisible: false, lastValueVisible: false, crosshairMarkerVisible: false })
 

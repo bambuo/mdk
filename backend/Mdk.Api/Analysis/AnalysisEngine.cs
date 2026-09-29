@@ -204,6 +204,10 @@ public static class AnalysisEngine
         {
             foreach (var (key, values) in chanResult.Series)
                 series[key] = values;
+            // 线段常跨越显示窗口（一段可能几百根），直接画端点会导致"看不见"：
+            // 这里把每条线段裁剪到显示窗口边界（越界的端点用边界K线收盘价代替），保证图上有线可看。
+            if (chanResult.Segments is { Count: > 0 } segs)
+                series["chanSegment"] = BuildSegmentSeries(candles, segs);
         }
 
         return new AnalysisResult(
@@ -255,6 +259,7 @@ public static class AnalysisEngine
         IReadOnlyList<ChanPivotInfo>? annotatedPivots = null)
     {
         var lastStroke = result.Strokes.Count > 0 ? result.Strokes[^1] : default;
+        var segments = result.Segments ?? [];
         var pivot = result.Pivots.Count > 0 ? result.Pivots[^1] : (Chan.ChanPivot?)null;
         var lastPoint = result.Points.Count > 0 ? result.Points[^1] : null;
         var lastPrice = candles[^1].Close;
@@ -278,7 +283,9 @@ public static class AnalysisEngine
             LastPrice: lastPoint?.Price,
             LastNote: lastPoint?.Note,
             Pivots: visiblePivots,
-            HigherContext: higherContext);
+            HigherContext: higherContext,
+            LevelMode: result.LevelMode,
+            SegmentCount: segments.Count);
     }
 
     /// <summary>
@@ -314,6 +321,12 @@ public static class AnalysisEngine
         {
             ReferenceBarIndex = p.ReferenceBarIndex - offset,
         };
+        Chan.ChanSegment ShiftSegment(Chan.ChanSegment seg) => seg with
+        {
+            StartBarIndex = seg.StartBarIndex - offset,
+            EndBarIndex = seg.EndBarIndex - offset,
+            StableFromBarIndex = seg.StableFromBarIndex is { } b ? b - offset : null,
+        };
 
         return raw with
         {
@@ -321,6 +334,7 @@ public static class AnalysisEngine
             Strokes = raw.Strokes.Select(Shift).ToList(),
             Fractals = raw.Fractals.Select(ShiftFractal).ToList(),
             Points = raw.Points.Select(ShiftPoint).ToList(),
+            Segments = (raw.Segments ?? []).Select(ShiftSegment).ToList(),
         };
     }
 
@@ -345,6 +359,21 @@ public static class AnalysisEngine
         // 只保留与显示窗口有交集的最近若干中枢
         var windowStart = candles[0].Time;
         return infos.Where(i => i.ToTime >= windowStart).TakeLast(8).ToList();
+    }
+
+    /// <summary>线段序列（裁剪到显示窗口）：与窗口有交集的线段按边界截断后连线。</summary>
+    private static double?[] BuildSegmentSeries(IReadOnlyList<Candle> candles, IReadOnlyList<Chan.ChanSegment> segments)
+    {
+        var line = new double?[candles.Count];
+        foreach (var seg in segments)
+        {
+            if (seg.EndBarIndex < 0 || seg.StartBarIndex > candles.Count - 1) continue;   // 与显示窗口无交集
+            var a = Math.Clamp(seg.StartBarIndex, 0, candles.Count - 1);
+            var b = Math.Clamp(seg.EndBarIndex, 0, candles.Count - 1);
+            line[a] = seg.StartBarIndex >= 0 ? seg.StartPrice : candles[a].Close;
+            line[b] = seg.EndBarIndex <= candles.Count - 1 ? seg.EndPrice : candles[b].Close;
+        }
+        return line;
     }
 
     /// <summary>按时间戳定位原始K线索引（找不到时回退到最后一根）。</summary>

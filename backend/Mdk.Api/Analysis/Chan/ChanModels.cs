@@ -66,10 +66,16 @@ public sealed record ChanBuySellPoint(
     double? AreaRatio,
     string Note);
 
-/// <summary>缠论分析结果（结构 + 买卖点 + 图表序列）。</summary>
+/// <summary>
+/// 缠论分析结果（结构 + 买卖点 + 图表序列）。
+/// LevelMode：stroke=以笔为最小单位（笔中枢，默认）；segment=启用线段（线段中枢与线段级别买卖点）。
+/// Segments 在 stroke 模式下为空。
+/// </summary>
 public sealed record ChanResult(
     IReadOnlyList<ChanFractal> Fractals,
     IReadOnlyList<ChanStroke> Strokes,
     IReadOnlyList<ChanPivot> Pivots,
     IReadOnlyList<ChanBuySellPoint> Points,
-    IReadOnlyDictionary<string, double?[]> Series);
+    IReadOnlyDictionary<string, double?[]> Series,
+    IReadOnlyList<ChanSegment>? Segments = null,
+    string LevelMode = "stroke");
