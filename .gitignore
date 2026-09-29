@@ -21,3 +21,6 @@ data/
 
 # IDE
 .idea/
+
+# Codex 工具产物
+.codex/

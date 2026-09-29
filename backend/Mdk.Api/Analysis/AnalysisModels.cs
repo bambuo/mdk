@@ -36,6 +36,25 @@ public readonly record struct SwingPoint(int Index, double Price, bool IsHigh);
 
 public sealed record MacdSeries(double?[] Dif, double?[] Dea, double?[] Hist);
 
+/// <summary>一个中枢的区间信息（供前端绘制中枢色带与列表）。</summary>
+public sealed record ChanPivotInfo(long FromTime, long ToTime, double Zg, double Zd, int Strokes, bool IsConfirmed);
+
+/// <summary>缠论结构摘要（供前端"缠论结构"卡片与信号标注使用）。</summary>
+public sealed record ChanSummary(
+    string LastStrokeDirection,
+    bool LastStrokeConfirmed,
+    int StrokeCount,
+    int PivotCount,
+    double? PivotZg,
+    double? PivotZd,
+    int PivotStrokes,
+    bool? PriceInPivot,
+    string? LastKind,
+    long? LastTime,
+    double? LastPrice,
+    string? LastNote,
+    IReadOnlyList<ChanPivotInfo> Pivots);
+
 /// <summary>一次完整的分析结果（REST /api/analysis 与 WS analysis 推送共用此结构）。</summary>
 public sealed record AnalysisResult(
     string Market,
@@ -49,7 +68,8 @@ public sealed record AnalysisResult(
     IReadOnlyList<PriceLevel> Levels,
     IReadOnlyList<TradeSignal> Signals,
     IReadOnlyDictionary<string, double?[]> Series,
-    MacdSeries Macd);
+    MacdSeries Macd,
+    ChanSummary? Chan = null);
 
 public sealed record KlinesResponse(
     string Market,

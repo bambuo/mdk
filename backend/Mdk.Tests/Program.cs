@@ -19,6 +19,7 @@ public static class Program
         MacdTests.Register(kit);
         BollingerBandsTests.Register(kit);
         AnalysisEngineTests.Register(kit);
+        ChanTests.Register(kit);
 
         return kit.RunAll();
     }

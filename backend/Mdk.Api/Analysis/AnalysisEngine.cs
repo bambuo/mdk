@@ -16,7 +16,11 @@ public static class AnalysisEngine
         IReadOnlyList<Candle> candles,
         SignalOptions? signalOptions = null,
         IReadOnlyList<Candle>? htfCandles = null,
-        string? htfInterval = null)
+        string? htfInterval = null,
+        Chan.ChanOptions? chanOptions = null,
+        IReadOnlyList<Candle>? chanCandles = null,
+        IReadOnlyList<Candle>? subLevelCandles = null,
+        string? subLevelInterval = null)
     {
         var so = signalOptions ?? SignalOptions.Default;
         var closes = candles.Select(c => c.Close).ToArray();
@@ -57,6 +61,55 @@ public static class AnalysisEngine
         var signals = SignalEngine.Generate(candles, sigFast, sigSlow, rsi, macd.Dif, macd.Dea, atr,
             so.CooldownBars, htfCandles, htfInterval, swings, RegimeAt, so.IncludeStructureSignals);
 
+        // 缠论：结构（分型/笔/中枢）+ 买卖点。
+        // 在"显示窗口 + 固定历史缓冲"的扩展窗口上计算（末段与显示窗口对齐）：中枢划分依赖先行历史，
+        // 若只用显示窗口，紧贴窗口起点的中枢会随窗口滑动而改变；配合 Chan:WarmupBars 暖机隔离，
+        // 使发出的信号与窗口起点无关（可复现）。
+        var chanOpt = chanOptions ?? Chan.ChanOptions.Default;
+        var chanWindow = chanCandles is { Count: > 0 } ext ? ext : candles;
+        var chanOffset = chanWindow.Count - candles.Count;
+        Chan.ChanResult? chanResult = null;
+        if (chanOpt.Enabled)
+        {
+            // 关键：MACD/ATR 必须始终在"内部固定窗口"上计算——否则同一结构在不同显示窗口下
+            // 会因指标起算点不同而得出不同的止损与可交易性判定，破坏复现性（2026-09-29 复测发现）。
+            double[] chanHist, chanAtr;
+            if (ReferenceEquals(chanWindow, candles))
+            {
+                chanHist = macd.Hist;
+                chanAtr = atr;
+            }
+            else
+            {
+                var chanCloses = chanWindow.Select(c => c.Close).ToArray();
+                chanHist = Macd.Compute(chanCloses).Hist;
+                chanAtr = Atr.Compute(chanWindow.Select(c => c.High).ToArray(), chanWindow.Select(c => c.Low).ToArray(), chanCloses, 14);
+            }
+            var raw = Chan.ChanAnalyzer.Analyze(chanWindow, chanHist, chanAtr, chanOpt, subLevelCandles, subLevelInterval);
+            chanResult = chanOffset == 0 ? raw : AlignToDisplayWindow(raw, chanOffset);
+        }
+
+        var chanSignals = chanResult is null
+            ? []
+            : chanResult.Points.Where(p => p.Time >= candles[0].Time).Select(p =>
+            {
+                var bar = BarIndexOf(candles, p.Time);
+                var regime = RegimeAt(bar);
+                return new TradeSignal(
+                    Time: p.Time,
+                    Side: p.Side,
+                    Source: "缠论",
+                    Price: p.Price,
+                    Note: $"[{p.Kind}] {p.Note}",
+                    StopPrice: p.StopPrice,
+                    IsConfirmed: true,
+                    TrendAligned: null,
+                    Adx: regime.Adx,
+                    AtrPct: regime.AtrPct,
+                    BandwidthPct: regime.BandwidthPct);
+            }).ToList();
+        var allSignals = chanSignals.Count == 0 ? signals : [.. signals, .. chanSignals];
+
         var series = new Dictionary<string, double?[]>(StringComparer.Ordinal)
         {
             ["ema20"] = ToNullable(ema20),
@@ -73,6 +126,11 @@ public static class AnalysisEngine
             series["emaSigFast"] = ToNullable(sigFast);
             series["emaSigSlow"] = ToNullable(sigSlow);
         }
+        if (chanResult is not null)
+        {
+            foreach (var (key, values) in chanResult.Series)
+                series[key] = values;
+        }
 
         return new AnalysisResult(
             market.ToString().ToLowerInvariant(),
@@ -84,9 +142,112 @@ public static class AnalysisEngine
             candles[^1].Close,
             trend,
             levels,
-            signals,
+            allSignals,
             series,
-            new MacdSeries(ToNullable(macd.Dif), ToNullable(macd.Dea), ToNullable(macd.Hist)));
+            new MacdSeries(ToNullable(macd.Dif), ToNullable(macd.Dea), ToNullable(macd.Hist)),
+            chanResult is null ? null : BuildChanSummary(candles, chanResult));
+    }
+
+    private static ChanSummary BuildChanSummary(IReadOnlyList<Candle> candles, Chan.ChanResult result)
+    {
+        var lastStroke = result.Strokes.Count > 0 ? result.Strokes[^1] : default;
+        var pivot = result.Pivots.Count > 0 ? result.Pivots[^1] : (Chan.ChanPivot?)null;
+        var lastPoint = result.Points.Count > 0 ? result.Points[^1] : null;
+        var lastPrice = candles[^1].Close;
+
+        // 笔数与中枢数都按"与显示窗口有交集"统计——与图表实际画出的内容一致，
+        // 否则会出现"卡片写 11 个中枢、图上只有 6 个"的口径不符（2026-09-29 用户反馈）。
+        var visiblePivots = BuildPivotInfos(candles, result);
+        var visibleStrokes = result.Strokes.Count(s => s.EndBarIndex >= 0 && s.StartBarIndex < candles.Count);
+
+        return new ChanSummary(
+            LastStrokeDirection: result.Strokes.Count == 0 ? "none" : lastStroke.IsUp ? "up" : "down",
+            LastStrokeConfirmed: result.Strokes.Count > 0 && lastStroke.IsConfirmed,
+            StrokeCount: visibleStrokes,
+            PivotCount: visiblePivots.Count,
+            PivotZg: pivot?.Zg,
+            PivotZd: pivot?.Zd,
+            PivotStrokes: pivot?.StrokeCount ?? 0,
+            PriceInPivot: pivot is { } p ? lastPrice >= p.Zd && lastPrice <= p.Zg : null,
+            LastKind: lastPoint?.Kind,
+            LastTime: lastPoint?.Time,
+            LastPrice: lastPoint?.Price,
+            LastNote: lastPoint?.Note,
+            Pivots: visiblePivots);
+    }
+
+    /// <summary>
+    /// 把在缠论内部窗口上算出的结果对齐到显示窗口。
+    /// offset = 内部窗口根数 − 显示窗口根数：
+    /// · offset &gt; 0：内部窗口更长 → 序列去掉头部 offset 项，索引整体左移；
+    /// · offset &lt; 0：显示窗口更长（调用方请求超过内部固定窗口）→ 序列左补空，索引右移。
+    /// </summary>
+    private static Chan.ChanResult AlignToDisplayWindow(Chan.ChanResult raw, int offset)
+    {
+        var displayLength = raw.Series.Values.FirstOrDefault()?.Length - offset ?? 0;
+        var series = new Dictionary<string, double?[]>(StringComparer.Ordinal);
+        foreach (var (key, values) in raw.Series)
+        {
+            var aligned = new double?[displayLength];
+            if (offset >= 0) Array.Copy(values, offset, aligned, 0, aligned.Length);
+            else Array.Copy(values, 0, aligned, -offset, values.Length);
+            series[key] = aligned;
+        }
+
+        Chan.ChanStroke Shift(Chan.ChanStroke s) => s with
+        {
+            StartBarIndex = s.StartBarIndex - offset,
+            EndBarIndex = s.EndBarIndex - offset,
+            StableFromBarIndex = s.StableFromBarIndex is { } b ? b - offset : null,
+        };
+        Chan.ChanFractal ShiftFractal(Chan.ChanFractal f) => f with
+        {
+            BarIndex = f.BarIndex - offset,
+            ConfirmBarIndex = f.ConfirmBarIndex - offset,
+        };
+        Chan.ChanBuySellPoint ShiftPoint(Chan.ChanBuySellPoint p) => p with
+        {
+            ReferenceBarIndex = p.ReferenceBarIndex - offset,
+        };
+
+        return raw with
+        {
+            Series = series,
+            Strokes = raw.Strokes.Select(Shift).ToList(),
+            Fractals = raw.Fractals.Select(ShiftFractal).ToList(),
+            Points = raw.Points.Select(ShiftPoint).ToList(),
+        };
+    }
+
+    /// <summary>中枢 → 区间信息（时间用显示窗口的K线时间换算，只保留与显示窗口有交集的中枢）。</summary>
+    private static IReadOnlyList<ChanPivotInfo> BuildPivotInfos(IReadOnlyList<Candle> candles, Chan.ChanResult result)
+    {
+        var infos = new List<ChanPivotInfo>();
+        foreach (var pivot in result.Pivots)
+        {
+            if (pivot.StartStrokeIndex < 0 || pivot.EndStrokeIndex >= result.Strokes.Count) continue;
+            var startBar = result.Strokes[pivot.StartStrokeIndex].StartBarIndex;
+            var endBar = result.Strokes[pivot.EndStrokeIndex].EndBarIndex;
+            if (startBar < 0 || endBar < 0 || startBar >= candles.Count || endBar >= candles.Count) continue;
+            infos.Add(new ChanPivotInfo(
+                FromTime: candles[startBar].Time,
+                ToTime: candles[endBar].Time,
+                Zg: pivot.Zg,
+                Zd: pivot.Zd,
+                Strokes: pivot.StrokeCount,
+                IsConfirmed: pivot.IsConfirmed));
+        }
+        // 只保留与显示窗口有交集的最近若干中枢
+        var windowStart = candles[0].Time;
+        return infos.Where(i => i.ToTime >= windowStart).TakeLast(8).ToList();
+    }
+
+    /// <summary>按时间戳定位原始K线索引（找不到时回退到最后一根）。</summary>
+    private static int BarIndexOf(IReadOnlyList<Candle> candles, long time)
+    {
+        for (var i = candles.Count - 1; i >= 0; i--)
+            if (candles[i].Time == time) return i;
+        return candles.Count - 1;
     }
 
     private static double?[] ToNullable(double[] values) =>
