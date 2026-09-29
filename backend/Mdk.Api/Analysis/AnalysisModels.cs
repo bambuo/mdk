@@ -26,7 +26,9 @@ public sealed record TradeSignal(
     bool? TrendAligned,
     double? Adx = null,
     double? AtrPct = null,
-    double? BandwidthPct = null);
+    double? BandwidthPct = null,
+    /// <summary>级别共振标签：aligned=窗口内有同向高周期缠论信号，counter=只有反向，none=无（仅缠论信号有值）。</summary>
+    string? Confluence = null);
 
 /// <summary>信号发生时的市场状态快照。</summary>
 public readonly record struct SignalRegime(double? Adx, double? AtrPct, double? BandwidthPct);
@@ -38,6 +40,18 @@ public sealed record MacdSeries(double?[] Dif, double?[] Dea, double?[] Hist);
 
 /// <summary>一个中枢的区间信息（供前端绘制中枢色带与列表）。</summary>
 public sealed record ChanPivotInfo(long FromTime, long ToTime, double Zg, double Zd, int Strokes, bool IsConfirmed);
+
+/// <summary>高周期（L1）结构上下文：用于"级别共振"展示（当前笔方向、价格相对最新中枢、最近买卖点）。</summary>
+public sealed record ChanContextSummary(
+    string Interval,
+    string LastStrokeDirection,
+    bool? PriceInPivot,
+    double? PivotZg,
+    double? PivotZd,
+    string? LastKind,
+    string? LastSide,
+    long? LastTime,
+    int SignalCount);
 
 /// <summary>缠论结构摘要（供前端"缠论结构"卡片与信号标注使用）。</summary>
 public sealed record ChanSummary(
@@ -53,7 +67,9 @@ public sealed record ChanSummary(
     long? LastTime,
     double? LastPrice,
     string? LastNote,
-    IReadOnlyList<ChanPivotInfo> Pivots);
+    IReadOnlyList<ChanPivotInfo> Pivots,
+    /// <summary>高周期结构上下文（无高周期数据时为 null）。</summary>
+    ChanContextSummary? HigherContext = null);
 
 /// <summary>一次完整的分析结果（REST /api/analysis 与 WS analysis 推送共用此结构）。</summary>
 public sealed record AnalysisResult(

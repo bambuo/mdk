@@ -1,4 +1,5 @@
 using Mdk.Api.Analysis;
+using Mdk.Api.Analysis.Chan;
 using Mdk.Api.Binance;
 using Mdk.Api.Domain;
 
@@ -194,7 +195,9 @@ internal static class RestEndpoints
                     Overall: Summarize("全部", pool),
                     BySource: bySource,
                     ByRegime: BuildBuckets("状态", pool, e => RegimeLabel(e.Adx)),
-                    ByAlignment: BuildBuckets("共振", pool, e => AlignmentLabel(e.TrendAligned))));
+                    ByAlignment: BuildBuckets("共振", pool, e => AlignmentLabel(e.TrendAligned)),
+                    ByConfluence: BuildBuckets("级别共振", pool.Where(e => e.Confluence != null).ToList(),
+                        e => ConfluenceTagger.Label(e.Confluence))));
             })
             .WithSummary("信号历史绩效（分来源 + 分级 + 波次口径 + 分市场状态/共振状态）");
     }

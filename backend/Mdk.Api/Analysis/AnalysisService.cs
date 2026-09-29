@@ -97,6 +97,7 @@ public sealed class AnalysisService(
                 Note = sig.Note,
                 StopPrice = sig.StopPrice,
                 TrendAligned = sig.TrendAligned,
+                Confluence = sig.Confluence,
                 IsConfirmed = sig.IsConfirmed,
                 Adx = sig.Adx,
                 AtrPct = sig.AtrPct,
@@ -124,7 +125,9 @@ public sealed class AnalysisService(
         if (_htfCache.TryGetValue(key, out var hit) && DateTimeOffset.UtcNow - hit.At < HtfCacheTtl)
             return hit.Candles;
 
-        var candles = await rest.GetKlinesAsync(market, pair, htfInterval, 260, ct);
+        // 与缠论内部窗口同口径（回填与在线需一致），至少 260 根
+        var bars = Math.Max(260, _chanOptions.AnalysisBars);
+        var candles = await rest.GetKlinesAsync(market, pair, htfInterval, Math.Min(1000, bars), ct);
         _htfCache[key] = (candles, DateTimeOffset.UtcNow);
         return candles;
     }

@@ -32,6 +32,8 @@ public sealed class SignalJournalEntry
     [JsonPropertyName("note")] public string? Note { get; set; }
     [JsonPropertyName("stopPrice")] public double? StopPrice { get; set; }
     [JsonPropertyName("trendAligned")] public bool? TrendAligned { get; set; }
+    /// <summary>级别共振标签（aligned/counter/none，仅缠论信号）。</summary>
+    [JsonPropertyName("confluence")] public string? Confluence { get; set; }
     [JsonPropertyName("isConfirmed")] public bool IsConfirmed { get; set; }
     /// <summary>信号发生时的市场状态（用于按状态分组统计，如 ADX≥25 的趋势市 vs 震荡市）。</summary>
     [JsonPropertyName("adx")] public double? Adx { get; set; }
@@ -145,4 +147,6 @@ public sealed record SignalStatsResponse(
     SignalSourceStats? Overall,
     IReadOnlyList<SignalSourceStats> BySource,
     IReadOnlyList<SignalBucketStats> ByRegime,
-    IReadOnlyList<SignalBucketStats> ByAlignment);
+    IReadOnlyList<SignalBucketStats> ByAlignment,
+    /// <summary>按级别共振标签分组（仅缠论信号有标签）。</summary>
+    IReadOnlyList<SignalBucketStats> ByConfluence);

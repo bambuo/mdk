@@ -13,7 +13,7 @@ namespace Mdk.Api.Analysis.Chan;
 /// 与在线口径的一致性（严格执行无未来函数）：
 /// · 每根K线 i 都用"截至 i 的内部固定窗口"复算（windowBars = Chan.AnalysisBars，与在线相同）；
 /// · 只取"记账时间恰好等于当前K线"的信号——更早记账的信号在更早的迭代中已产出；
-/// · 次级别同样只用"时间 ≤ i 的次级别K线"；
+/// · 次级别与高周期同样只用"时间 ≤ i 的K线"；高周期结构亦逐根复算（其次级别即本级别）；
 /// · 因此回填信号与在线信号**逐字段可比**（同一套代码路径、同一窗口口径）。
 ///
 /// 注意：回填样本是"事后一次性生成"的（存在事后挑选参数的风险），故日志用 Origin 字段区分
@@ -34,10 +34,12 @@ public static class ChanBackfill
         bool? TrendAligned,
         double? Adx,
         double? AtrPct,
-        double? BandwidthPct);
+        double? BandwidthPct,
+        string? Confluence);
 
     /// <summary>
-    /// 逐根复算。mainHistory 需覆盖 [fromTime - windowBars, toTime]；sub/htf 历史为可选来源。
+    /// 逐根复算。mainHistory 需覆盖 [fromTime - windowBars, toTime]；
+    /// subHistory 为次级别（次级别确认用）；htfHistory 为高周期（趋势对齐 + 级别共振用）。
     /// </summary>
     public static IReadOnlyList<SeedSignal> Replay(
         IReadOnlyList<Candle> mainHistory,
@@ -49,27 +51,66 @@ public static class ChanBackfill
         long fromTime,
         long toTime)
     {
-        var results = new List<SeedSignal>();
-        if (mainHistory.Count == 0) return results;
+        var l0 = ReplayPoints(mainHistory, subHistory, subInterval, options, fromTime, toTime);
 
-        var windowBars = Math.Max(120, options.AnalysisBars);
-        var subWindowBars = 300;
+        // 高周期结构：同样逐根复算（其次级别即本级别），用于趋势对齐与级别共振
         double[]? htfEma50 = null;
         long htfSeconds = 0;
+        IReadOnlyList<ChanBuySellPoint> htfPoints = [];
         if (htfHistory is { Count: > 50 } && !string.IsNullOrEmpty(htfInterval))
         {
             htfEma50 = Ema.Compute(htfHistory.Select(c => c.Close).ToArray(), 50);
             htfSeconds = MarketIntervals.IntervalSeconds(htfInterval);
+            htfPoints = ReplayPoints(htfHistory, mainHistory, null, options, fromTime, toTime)
+                .Select(p => p.Point).ToList();
         }
 
-        for (var i = 0; i < mainHistory.Count; i++)
+        var confluenceWindow = htfSeconds > 0 ? options.ConfluenceWindowBars * htfSeconds : 0;
+        var tags = confluenceWindow > 0
+            ? ConfluenceTagger.Tag(htfPoints, confluenceWindow, l0.Select(p => (p.Point.Time, p.Point.Side)))
+            : new Dictionary<(long, string), string>();
+
+        return l0.Select(p => new SeedSignal(
+            Time: p.Point.Time,
+            Side: p.Point.Side,
+            Kind: p.Point.Kind,
+            Price: p.Point.Price,
+            ReferencePrice: p.Point.ReferencePrice,
+            StopPrice: p.Point.StopPrice,
+            AreaRatio: p.Point.AreaRatio,
+            Note: p.Point.Note,
+            TrendAligned: TrendAligned(htfHistory, htfEma50, htfSeconds, p.Point.Time, p.Point.Side),
+            Adx: p.Adx,
+            AtrPct: p.AtrPct,
+            BandwidthPct: p.BandwidthPct,
+            Confluence: tags.GetValueOrDefault((p.Point.Time, p.Point.Side)))).ToList();
+    }
+
+    private sealed record LevelPoint(ChanBuySellPoint Point, double? Adx, double? AtrPct, double? BandwidthPct);
+
+    /// <summary>单级别的逐根复算（不含高周期相关内容，供 L0 与 L1 复用）。</summary>
+    private static List<LevelPoint> ReplayPoints(
+        IReadOnlyList<Candle> history,
+        IReadOnlyList<Candle>? subHistory,
+        string? subInterval,
+        ChanOptions options,
+        long fromTime,
+        long toTime)
+    {
+        var results = new List<LevelPoint>();
+        if (history.Count == 0) return results;
+
+        var windowBars = Math.Max(120, options.AnalysisBars);
+        const int subWindowBars = 300;
+
+        for (var i = 0; i < history.Count; i++)
         {
-            var barTime = mainHistory[i].Time;
+            var barTime = history[i].Time;
             if (barTime < fromTime || barTime > toTime) continue;
             if (i + 1 < windowBars) continue;   // 历史不足以构成完整内部窗口
 
             var window = new Candle[windowBars];
-            for (var k = 0; k < windowBars; k++) window[k] = mainHistory[i - windowBars + 1 + k];
+            for (var k = 0; k < windowBars; k++) window[k] = history[i - windowBars + 1 + k];
 
             var closes = new double[windowBars];
             var highs = new double[windowBars];
@@ -83,7 +124,6 @@ public static class ChanBackfill
             var macdHist = Macd.Compute(closes).Hist;
             var atr = Atr.Compute(highs, lows, closes, 14);
 
-            // 次级别：仅取"时间 ≤ 当前K线"的K线
             Candle[]? subWindow = null;
             if (subHistory is { Count: > 0 } && !string.IsNullOrEmpty(subInterval))
             {
@@ -94,7 +134,7 @@ public static class ChanBackfill
 
             var chan = ChanAnalyzer.Analyze(window, macdHist, atr, options, subWindow, subInterval);
 
-            // 只在"记账时间 == 当前K线"时产出（保证与在线一致：信号在该K线收盘时可知）
+            // 只在"记账时间 == 当前K线"时产出（与在线一致：信号在该K线收盘时可知）
             foreach (var point in chan.Points.Where(p => p.Time == barTime))
             {
                 var dmi = AdxDmi.Compute(highs, lows, closes, 14);
@@ -106,20 +146,7 @@ public static class ChanBackfill
                 var bandwidth = !double.IsNaN(mid) && mid > 0
                     ? (boll.Upper[last] - boll.Lower[last]) / mid
                     : (double?)null;
-
-                results.Add(new SeedSignal(
-                    Time: point.Time,
-                    Side: point.Side,
-                    Kind: point.Kind,
-                    Price: point.Price,
-                    ReferencePrice: point.ReferencePrice,
-                    StopPrice: point.StopPrice,
-                    AreaRatio: point.AreaRatio,
-                    Note: point.Note,
-                    TrendAligned: TrendAligned(htfHistory, htfEma50, htfSeconds, point.Time, point.Side),
-                    Adx: adx,
-                    AtrPct: atrPct,
-                    BandwidthPct: bandwidth));
+                results.Add(new LevelPoint(point, adx, atrPct, bandwidth));
             }
         }
         return results;

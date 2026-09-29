@@ -21,6 +21,7 @@ public static class Program
         AnalysisEngineTests.Register(kit);
         ChanTests.Register(kit);
         ChanBackfillTests.Register(kit);
+        ConfluenceTaggerTests.Register(kit);
 
         return kit.RunAll();
     }

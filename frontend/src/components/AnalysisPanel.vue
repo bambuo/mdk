@@ -27,6 +27,19 @@ const namedLevels = computed(() => {
 const resistances = computed(() => namedLevels.value.filter(l => l.kind === 'resistance'))
 const supports = computed(() => namedLevels.value.filter(l => l.kind === 'support'))
 
+/** 级别共振筛选：all=全部，aligned=只看"级别共振"信号 */
+const confluenceOnly = ref(false)
+
+/** 共振分组绩效（来自 byConfluence） */
+const confluenceStats = computed(() => props.stats?.byConfluence ?? [])
+
+/** 共振标签展示 */
+function confluenceLabel(tag: string | null): string {
+  if (tag === 'aligned') return '共振'
+  if (tag === 'counter') return '逆向'
+  return ''
+}
+
 /** 共振筛选：all=全部，aligned=只看顺大势，counter=只看逆大势（当前证据无显著差异，仅作状态标注） */
 const alignment = ref<'all' | 'aligned' | 'counter'>('all')
 const alignmentOptions = [
@@ -58,6 +71,7 @@ const recentSignals = computed(() => {
   }
   if (alignment.value === 'aligned') list = list.filter(s => s.trendAligned === true)
   if (alignment.value === 'counter') list = list.filter(s => s.trendAligned === false)
+  if (confluenceOnly.value) list = list.filter(s => s.confluence === 'aligned')
   return list.reverse().slice(0, 20)
 })
 
@@ -136,6 +150,22 @@ function sideColor(side: string) {
           <template v-else>—</template>
         </span>
       </div>
+      <!-- 高周期结构上下文（级别共振的依据） -->
+      <div v-if="analysis.chan.higherContext" class="chan-higher">
+        <span class="k">高周期 {{ analysis.chan.higherContext.interval }}</span>
+        <span class="v">
+          {{ analysis.chan.higherContext.lastStrokeDirection === 'up' ? '向上笔' : analysis.chan.higherContext.lastStrokeDirection === 'down' ? '向下笔' : '—' }}
+          <i>{{ analysis.chan.higherContext.priceInPivot == null ? '' : analysis.chan.higherContext.priceInPivot ? '· 价格在中枢内' : '· 价格在中枢外' }}</i>
+          <i v-if="analysis.chan.higherContext.lastKind">
+            · 最近 {{ analysis.chan.higherContext.lastKind }}
+            <span :class="analysis.chan.higherContext.lastSide === 'buy' ? 'up' : 'down'">
+              {{ analysis.chan.higherContext.lastSide === 'buy' ? '买' : '卖' }}
+            </span>
+          </i>
+          <i>· 该周期信号 {{ analysis.chan.higherContext.signalCount }} 个</i>
+        </span>
+      </div>
+
       <!-- 中枢列表：缠论结构的核心，最近的在前 -->
       <div v-if="analysis.chan.pivots.length" class="chan-pivots">
         <div class="pivot-hd"><span>中枢区间</span><span>笔数</span><span>状态</span></div>
@@ -192,6 +222,12 @@ function sideColor(side: string) {
               {{ shortLabel(b.label) }} {{ (b.winRate * 100).toFixed(0) }}%<i>({{ b.n }})</i>
             </span>
           </div>
+          <div v-if="confluenceStats.length" class="tbl-note">
+            <span class="k">级别共振</span>
+            <span v-for="b in confluenceStats" :key="b.label" class="v" :title="`n=${b.n} · 超额 ${(b.avgExcess * 100).toFixed(2)}%`">
+              {{ b.label }} {{ (b.winRate * 100).toFixed(0) }}%<i>({{ b.n }})</i>
+            </span>
+          </div>
           <div v-if="alignmentStats.length" class="tbl-note">
             <span class="k">按共振</span>
             <span v-for="b in alignmentStats" :key="b.label" class="v" :title="`n=${b.n} · 超额 ${(b.avgExcess * 100).toFixed(2)}%`">
@@ -217,6 +253,11 @@ function sideColor(side: string) {
             @click="alignment = opt.value"
           >{{ opt.label }}</button>
         </div>
+        <div class="seg">
+          <button type="button" :class="{ on: !confluenceOnly }" @click="confluenceOnly = false">全部</button>
+          <button type="button" :class="{ on: confluenceOnly }" @click="confluenceOnly = true"
+                  title="只显示前 1 根高周期K线内出现同向高周期缠论信号的信号（级别共振）">只看共振</button>
+        </div>
         <a-select
           v-model="selectedSources"
           class="src-select"
@@ -240,6 +281,9 @@ function sideColor(side: string) {
               <span class="side" :class="sig.side">{{ sig.side === 'buy' ? '买' : '卖' }}</span>
               <span class="src-name">{{ sig.source }}</span>
               <span v-if="!sig.isConfirmed" class="preview-badge">盘中</span>
+              <span v-if="confluenceLabel(sig.confluence)" class="conf-badge" :class="sig.confluence">
+                {{ confluenceLabel(sig.confluence) }}
+              </span>
               <span class="signal-time" :title="formatTimeFull(sig.time)">{{ formatTime(sig.time) }}</span>
               <span class="signal-price" :class="sig.side">{{ formatPrice(sig.price) }}</span>
             </div>
@@ -364,6 +408,57 @@ function sideColor(side: string) {
   margin: 6px 0 0;
   font-size: 10px;
   color: #5c6470;
+}
+
+/* ── 高周期上下文与共振标签 ── */
+.chan-higher {
+  display: grid;
+  grid-template-columns: 74px 1fr;
+  gap: 4px 8px;
+  margin-top: 8px;
+  padding-top: 6px;
+  border-top: 1px solid #1e222a;
+  font-size: 11px;
+}
+
+.chan-higher .k {
+  color: #6b7280;
+}
+
+.chan-higher .v {
+  color: #9aa3b0;
+}
+
+.chan-higher .v i {
+  font-style: normal;
+  color: #6b7280;
+  margin-left: 2px;
+}
+
+.chan-higher .up {
+  color: #26a69a;
+}
+
+.chan-higher .down {
+  color: #ef5350;
+}
+
+.conf-badge {
+  font-size: 10px;
+  border-radius: 2px;
+  padding: 0 3px;
+  line-height: 14px;
+}
+
+.conf-badge.aligned {
+  color: #26a69a;
+  border: 1px solid rgba(38, 166, 154, 0.45);
+  background: rgba(38, 166, 154, 0.1);
+}
+
+.conf-badge.counter {
+  color: #6b7280;
+  border: 1px solid #2c313a;
 }
 
 /* ── 缠论中枢列表 ── */

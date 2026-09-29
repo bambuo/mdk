@@ -58,6 +58,8 @@ export interface TradeSignal {
   adx: number | null
   atrPct: number | null
   bandwidthPct: number | null
+  /** 级别共振标签：aligned=窗口内有同向高周期缠论信号；counter=只有反向；none=无（仅缠论信号有值） */
+  confluence: 'aligned' | 'counter' | 'none' | null
 }
 
 export interface MacdSeries {
@@ -91,6 +93,18 @@ export interface ChanSummary {
   lastPrice: number | null
   lastNote: string | null
   pivots: ChanPivotInfo[]
+  /** 高周期结构上下文（级别共振的依据） */
+  higherContext: {
+    interval: string
+    lastStrokeDirection: 'up' | 'down' | 'none'
+    priceInPivot: boolean | null
+    pivotZg: number | null
+    pivotZd: number | null
+    lastKind: string | null
+    lastSide: 'buy' | 'sell' | null
+    lastTime: number | null
+    signalCount: number
+  } | null
 }
 
 export interface AnalysisResult {
@@ -140,6 +154,15 @@ export interface SignalSourceStats {
   topSymbolShare: number
 }
 
+/** 按级别共振标签分组的绩效 */
+export interface SignalBucketStatsMulti {
+  label: string
+  n: number
+  winRate: number
+  avgExcess: number
+  netPositiveRate: number
+}
+
 /** 分市场状态或分共振状态的分组绩效 */
 export interface SignalBucketStats {
   label: string
@@ -155,4 +178,5 @@ export interface SignalStatsResponse {
   bySource: SignalSourceStats[]
   byRegime: SignalBucketStats[]
   byAlignment: SignalBucketStats[]
+  byConfluence: SignalBucketStats[]
 }

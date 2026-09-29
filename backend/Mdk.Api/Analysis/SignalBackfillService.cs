@@ -170,8 +170,11 @@ public sealed class SignalBackfillService(
         IReadOnlyList<Models.Candle>? htf = null;
         if (htfInterval is not null)
         {
+            // 高周期同样要"逐根复算"，因此需要 windowBars 根自身预热（此前只留 60 根余量，
+            // 导致高周期几乎产不出信号、共振标签形同虚设 —— 2026-09-29 实测发现）
             var htfBars = MarketIntervals.IntervalSeconds(htfInterval);
-            htf = await rest.GetKlinesRangeAsync(MarketKind.Spot, pair, htfInterval, fromSec - 60 * htfBars, toSec, ct);
+            var htfWarmup = (long)(windowBars * htfBars * 1.05);
+            htf = await rest.GetKlinesRangeAsync(MarketKind.Spot, pair, htfInterval, fromSec - htfWarmup, toSec, ct);
         }
 
         var seedFrom = now - days * 86400L;
@@ -211,6 +214,7 @@ public sealed class SignalBackfillService(
                 Note = $"[{s.Kind}] {s.Note}",
                 StopPrice = s.StopPrice,
                 TrendAligned = s.TrendAligned,
+                Confluence = s.Confluence,
                 IsConfirmed = true,
                 Adx = s.Adx,
                 AtrPct = s.AtrPct,

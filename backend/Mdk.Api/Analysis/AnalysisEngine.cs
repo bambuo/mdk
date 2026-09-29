@@ -89,6 +89,23 @@ public static class AnalysisEngine
             chanResult = chanOffset == 0 ? raw : AlignToDisplayWindow(raw, chanOffset);
         }
 
+        // 级别共振：在"高周期窗口"上跑一次缠论（其次级别即当前级别），用同向信号窗口给本级别信号打标签。
+        // 只用记账时间 ≤ 本级别信号时间的高周期信号 —— 无未来函数。
+        Chan.ChanResult? htfChan = null;
+        if (chanResult is not null && htfCandles is { Count: > 50 } htfForChan && htfInterval is not null
+            && ReferenceEquals(htfCandles, chanWindow) == false)
+        {
+            var htfCloses = htfForChan.Select(c => c.Close).ToArray();
+            var htfHist = Macd.Compute(htfCloses).Hist;
+            var htfAtr = Atr.Compute(htfForChan.Select(c => c.High).ToArray(), htfForChan.Select(c => c.Low).ToArray(), htfCloses, 14);
+            htfChan = Chan.ChanAnalyzer.Analyze(htfForChan, htfHist, htfAtr, chanOpt, candles, interval);
+        }
+        var confluenceWindow = chanOpt.ConfluenceWindowBars * MarketIntervals.IntervalSeconds(htfInterval ?? interval);
+        var confluenceTags = chanResult is null
+            ? new Dictionary<(long, string), string>()
+            : Chan.ConfluenceTagger.Tag(htfChan?.Points ?? [], confluenceWindow,
+                chanResult.Points.Select(p => (p.Time, p.Side)));
+
         var chanSignals = chanResult is null
             ? []
             : chanResult.Points.Where(p => p.Time >= candles[0].Time).Select(p =>
@@ -106,7 +123,8 @@ public static class AnalysisEngine
                     TrendAligned: null,
                     Adx: regime.Adx,
                     AtrPct: regime.AtrPct,
-                    BandwidthPct: regime.BandwidthPct);
+                    BandwidthPct: regime.BandwidthPct,
+                    Confluence: confluenceTags.GetValueOrDefault((p.Time, p.Side)));
             }).ToList();
         var allSignals = chanSignals.Count == 0 ? signals : [.. signals, .. chanSignals];
 
@@ -145,10 +163,34 @@ public static class AnalysisEngine
             allSignals,
             series,
             new MacdSeries(ToNullable(macd.Dif), ToNullable(macd.Dea), ToNullable(macd.Hist)),
-            chanResult is null ? null : BuildChanSummary(candles, chanResult));
+            chanResult is null
+                ? null
+                : BuildChanSummary(candles, chanResult,
+                    htfChan is null || htfInterval is null ? null : BuildHigherContext(htfCandles!, htfChan, htfInterval)));
     }
 
-    private static ChanSummary BuildChanSummary(IReadOnlyList<Candle> candles, Chan.ChanResult result)
+    /// <summary>高周期结构上下文：当前笔方向、价格相对最新中枢、最近买卖点。</summary>
+    private static ChanContextSummary BuildHigherContext(
+        IReadOnlyList<Candle> htfCandles, Chan.ChanResult htf, string htfInterval)
+    {
+        var lastStroke = htf.Strokes.Count > 0 ? htf.Strokes[^1] : default;
+        var pivot = htf.Pivots.Count > 0 ? htf.Pivots[^1] : (Chan.ChanPivot?)null;
+        var lastPoint = htf.Points.Count > 0 ? htf.Points[^1] : null;
+        var last = htfCandles[^1].Close;
+        return new ChanContextSummary(
+            Interval: htfInterval,
+            LastStrokeDirection: htf.Strokes.Count == 0 ? "none" : lastStroke.IsUp ? "up" : "down",
+            PriceInPivot: pivot is { } p ? last >= p.Zd && last <= p.Zg : null,
+            PivotZg: pivot?.Zg,
+            PivotZd: pivot?.Zd,
+            LastKind: lastPoint?.Kind,
+            LastSide: lastPoint?.Side,
+            LastTime: lastPoint?.Time,
+            SignalCount: htf.Points.Count);
+    }
+
+    private static ChanSummary BuildChanSummary(
+        IReadOnlyList<Candle> candles, Chan.ChanResult result, ChanContextSummary? higherContext = null)
     {
         var lastStroke = result.Strokes.Count > 0 ? result.Strokes[^1] : default;
         var pivot = result.Pivots.Count > 0 ? result.Pivots[^1] : (Chan.ChanPivot?)null;
@@ -173,7 +215,8 @@ public static class AnalysisEngine
             LastTime: lastPoint?.Time,
             LastPrice: lastPoint?.Price,
             LastNote: lastPoint?.Note,
-            Pivots: visiblePivots);
+            Pivots: visiblePivots,
+            HigherContext: higherContext);
     }
 
     /// <summary>

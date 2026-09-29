@@ -45,5 +45,11 @@ public sealed class ChanOptions
     /// <summary>次级别转向确认的允许延迟（次级别K线根数）：超过则视为次级别未确认。</summary>
     public int SubLevelConfirmWindowBars { get; set; } = 10;
 
+    /// <summary>
+    /// 级别共振窗口（高周期K线根数）：本级别信号前该窗口内若出现同向高周期缠论信号，标记为"共振"。
+    /// 依据：回填样本探测显示窗口越紧越好（1×4h 优于 2×4h 优于 6×4h）。
+    /// </summary>
+    public int ConfluenceWindowBars { get; set; } = 1;
+
     public int MinMergedBarsBetween => StrokeMode.Equals("Strict", StringComparison.OrdinalIgnoreCase) ? 3 : 2;
 }
