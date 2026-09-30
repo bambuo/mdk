@@ -12,7 +12,8 @@ namespace Mdk.Api.Binance;
 /// <summary>
 /// 币安K线 WS 上游管理：每个 (市场, 交易对, 周期) 一条上游连接（浏览器多标签共享，引用计数，空闲自动断开），
 /// 断线指数退避重连。
-/// 兜底：若 WS 静默超过数秒（部分网络环境下 fstream 合约流只握手不推数据），
+/// 兜底：若 WS 静默超过数秒（曾因合约基址缺少 /market 分区而长期收不到帧，见 BinanceRestClient 注释；
+/// 该问题已修，但保留兜底以应对真正的网络异常），
 /// 自动改用 REST 轮询最新K线并推送，恢复与不依赖 WS 的实时性。
 /// </summary>
 public sealed class KlineStreamService : IAsyncDisposable

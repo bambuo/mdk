@@ -22,7 +22,12 @@ public sealed class BinanceOptions
     public string FuturesRestBaseUrl { get; set; } = "https://fapi.binance.com";
 
     /// <summary>U 本位合约 WebSocket 基地址。</summary>
-    public string FuturesWsBaseUrl { get; set; } = "wss://fstream.binance.com";
+    /// <summary>
+    /// 合约 WebSocket 基址。**必须带数据分区路径**：币安已把合约流拆分为 /market 与 /public，
+    /// 旧的无分区路径（wss://fstream.binance.com/ws/...）仍会接受握手但**不再推送任何数据帧**
+    /// （2026-09-30 对照实验：旧路径 12s 收 0 帧；/market/ws 同条件收 33 帧）。
+    /// </summary>
+    public string FuturesWsBaseUrl { get; set; } = "wss://fstream.binance.com/market";
 }
 
 /// <summary>币安返回的业务错误（HTTP 状态可能仍是 200）。</summary>
