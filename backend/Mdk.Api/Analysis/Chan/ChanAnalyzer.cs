@@ -81,6 +81,12 @@ public static class ChanAnalyzer
     }
 
     /// <summary>生成图表用稀疏序列：笔折线（端点）、分型点、最新中枢上下沿（覆盖该中枢区间）。</summary>
+    /// <summary>
+    /// 图表用稀疏序列：**只产出 chanStroke**（笔端点折线）。
+    /// 分型点与中枢上下沿曾各占两个 500 长度序列，但前端零引用——
+    /// 中枢带由前端自定义图元按 <see cref="ChanResult.Pivots"/> 绘制，分型点未绘制；
+    /// 故 2026-09-30 审查后下线，响应体积减少约 20%（见 PLAN §0.20）。
+    /// </summary>
     private static Dictionary<string, decimal?[]> BuildSeries(
         int barCount,
         IReadOnlyList<ChanFractal> fractals,
@@ -94,36 +100,9 @@ public static class ChanAnalyzer
             if (s.EndBarIndex >= 0 && s.EndBarIndex < barCount) stroke[s.EndBarIndex] = s.EndPrice;
         }
 
-        var top = NewSeries(barCount);
-        var bottom = NewSeries(barCount);
-        foreach (var f in fractals)
-        {
-            if (f.BarIndex < 0 || f.BarIndex >= barCount) continue;
-            if (f.IsTop) top[f.BarIndex] = f.Price;
-            else bottom[f.BarIndex] = f.Price;
-        }
-
-        // 中枢带：所有返回的中枢区间都填充（互相不重叠），便于叠加显示
-        var zg = NewSeries(barCount);
-        var zd = NewSeries(barCount);
-        foreach (var p in pivots)
-        {
-            var from = Math.Max(0, strokes[p.StartStrokeIndex].StartBarIndex);
-            var to = Math.Min(barCount - 1, strokes[p.EndStrokeIndex].EndBarIndex);
-            for (var i = from; i <= to; i++)
-            {
-                zg[i] = p.Zg;
-                zd[i] = p.Zd;
-            }
-        }
-
         return new Dictionary<string, decimal?[]>(StringComparer.Ordinal)
         {
             ["chanStroke"] = stroke,
-            ["chanFractalTop"] = top,
-            ["chanFractalBottom"] = bottom,
-            ["chanZg"] = zg,
-            ["chanZd"] = zd,
         };
     }
 

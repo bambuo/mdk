@@ -467,11 +467,11 @@ public static class ChanTests
             // 中枢列表不受 MaxPoints 影响；买卖点按上限裁剪，但中枢数保持真实
             Assert.True(result.Pivots.Count >= 0, "中枢列表应存在（可为 0）");
             Assert.True(result.Points.Count <= 1, "买卖点应遵守 MaxPoints 上限");
+            // 中枢界序列已下线（前端零引用，见 PLAN §0.20）；改由 Pivots 列表直接核验真实数量
             var pivotCountReported = result.Pivots.Count;
-            var zg = result.Series["chanZg"];
-            var distinct = zg.Where(v => v != null).Distinct().Count();
-            Assert.True(distinct <= pivotCountReported + 1,
-                $"序列中的中枢价位种类({distinct})不应超过报告的中枢数({pivotCountReported})加 1");
+            var distinct = result.Pivots.Select(p => p.Zg).Concat(result.Pivots.Select(p => p.Zd)).Distinct().Count();
+            Assert.True(distinct <= pivotCountReported * 2,
+                $"中枢价位种类({distinct})不应超过报告的中枢数({pivotCountReported})的两倍");
         });
 
         t.Case("缠论_P4_1类因不可交易被丢弃时_2类仍可产生", () =>
@@ -697,7 +697,8 @@ public static class ChanTests
             var result = ChanAnalyzer.Analyze(candles, hist, FlatAtr(candles.Count, candles[0].Close * 0.01m), ChanOptions.Default);
             Assert.True(result.Strokes.Count > 0, "应构建出笔");
             Assert.Equal(candles.Count, result.Series["chanStroke"].Length);
-            Assert.Equal(candles.Count, result.Series["chanZg"].Length);
+            // 分型/中枢界序列已下线（前端零引用）；图表用序列只剩 chanStroke
+            Assert.Equal(1, result.Series.Count);
             Assert.True(result.Fractals.Count > 0, "应识别出分型");
         });
     }

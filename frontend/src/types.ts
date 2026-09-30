@@ -72,8 +72,6 @@ export interface TradeSignal {
   stopPrice: number | null
   /** true=已收盘确认（不可撤销）；false=盘中预警（可能消失） */
   isConfirmed: boolean
-  /** 信号方向与高一期 EMA50 是否同向（多周期共振）；高周期数据缺失时为 null */
-  trendAligned: boolean | null
   /** 信号发生时的市场状态（ADX 强度 / ATR 占价比例 / 布林带宽比例） */
   adx: number | null
   atrPct: number | null
@@ -231,11 +229,18 @@ export interface SignalBucketStats {
 }
 
 export interface SignalStatsResponse {
+  /** 统计窗口口径（按记录时间；回填样本的记录时间=回填运行时刻） */
+  windowBasis: string
+  /** 窗口内独立波次数（实盘判据的样本量） */
+  windowEpisodes: number
+  /** 其中实时落库的独立波次数（实盘判据要求 ≥ realtimeRequired） */
+  realtimeEpisodes: number
+  /** 实盘判据要求的实时波次门槛 */
+  realtimeRequired: number
   totalEvaluated: number
   overall: SignalSourceStats | null
   bySource: SignalSourceStats[]
   byRegime: SignalBucketStats[]
-  byAlignment: SignalBucketStats[]
   byConfluence: SignalBucketStats[]
 }
 

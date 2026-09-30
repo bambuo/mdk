@@ -18,14 +18,17 @@ public static class SignalQualityRules
     {
         var n = items.Count;
         var episodes = EpisodeRepresentatives(items);
-        var topShare = n == 0 ? 0 : items.GroupBy(e => e.Pair).Max(g => g.Count()) / (decimal)n;
+        // 全部口径统一到**独立波次**：同一指标在不同位置（分级 / 可信度徽章 / 实盘判据）必须同底，
+        // 否则"胜率 48%（原始）"与"胜率 51%（波次）"会同时出现在界面上而无法比较。
+        var m = episodes.Count;
+        var topShare = m == 0 ? 0 : episodes.GroupBy(e => e.Pair).Max(g => g.Count()) / (decimal)m;
 
-        if (episodes.Count < 30)
-            return ("样本不足", $"独立波次 {episodes.Count} < 30（原始 {n} 条）", topShare);
+        if (m < 30)
+            return ("样本不足", $"独立波次 {m} < 30（原始 {n} 条）", topShare);
 
-        var netPositive = items.Count(e => e.Outcome!.NetPositive == true) / (decimal)n;
+        var netPositive = episodes.Count(e => e.Outcome!.NetPositive == true) / (decimal)m;
         var episodeExcess = episodes.Select(e => e.Outcome!.Excess ?? 0).ToList();
-        var medExcess = Median(items.Select(e => e.Outcome!.Excess ?? 0));
+        var medExcess = Median(episodeExcess);
 
         var mean = episodeExcess.Average();
         var sd = episodeExcess.Count > 1
@@ -41,7 +44,7 @@ public static class SignalQualityRules
             return ("仅观察", $"中位超额 {medExcess * 100:+0.00m;-0.00m}% ≤ 0（均值被少数大赢家拉高）", topShare);
         if (topShare > 0.5m)
             return ("仅观察", $"单一标的占比 {topShare * 100:0}% > 50%（集中度过高）", topShare);
-        var refReason = $"波次 {episodes.Count} · t={t:0.0} · 扣费后为正 {netPositive * 100:0}% · 中位超额 {medExcess * 100:+0.00;-0.00}%";
+        var refReason = $"波次 {m} · t={t:0.0} · 扣费后为正 {netPositive * 100:0}% · 中位超额 {medExcess * 100:+0.00;-0.00}%";
         var realtime = episodes.Where(IsRealtimeRecorded).ToList();
         var gate = TradableGate(realtime);
         return gate.Ok

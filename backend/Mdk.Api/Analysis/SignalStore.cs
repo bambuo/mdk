@@ -556,10 +556,19 @@ public sealed record SignalBucketStats(
     decimal NetPositiveRate);
 
 public sealed record SignalStatsResponse(
+    /// <summary>统计窗口口径：按**记录时间**（RecorderAt）筛选，而非信号K线时间——
+    /// 回填样本的 recordedAt 是回填运行时刻，因此"近N天"对回填样本等价于"全部回填样本"。</summary>
+    string WindowBasis,
+    /// <summary>窗口内的独立波次数（当前生效的实盘判据样本量）。</summary>
+    int WindowEpisodes,
+    /// <summary>其中**实时落库**的独立波次数（实盘判据要求 ≥ SignalQualityRules.RealtimeMinEpisodes）。</summary>
+    int RealtimeEpisodes,
+    /// <summary>实盘晋升判据要求的实时波次门槛（界面用于显示进度 x/门槛）。</summary>
+    int RealtimeRequired,
     int TotalEvaluated,
     SignalSourceStats? Overall,
     IReadOnlyList<SignalSourceStats> BySource,
     IReadOnlyList<SignalBucketStats> ByRegime,
-    IReadOnlyList<SignalBucketStats> ByAlignment,
-    /// <summary>按级别共振标签分组（仅缠论信号有标签）。</summary>
+    /// <summary>按级别共振标签分组。已移除"顺/逆大势"分组：该维度在线恒为空（纯缠论后不再计算 trendAligned），
+    /// 仅有回填样本有值，两批样本不可比（2026-09-30 审查，见 PLAN §0.20）。</summary>
     IReadOnlyList<SignalBucketStats> ByConfluence);

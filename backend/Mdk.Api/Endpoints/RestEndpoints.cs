@@ -171,19 +171,21 @@ internal static class RestEndpoints
                 {
                     if (items.Count == 0) return null;
                     var grade = SignalQualityRules.Evaluate(items);
+                    // 与分级同底：比率一律按**独立波次**计算（原始条数只作为分母备注展示）
+                    var episodes = SignalQualityRules.EpisodeRepresentatives(items);
                     return new SignalSourceStats(
                         Source: source,
                         N: items.Count,
-                        NEpisodes: SignalQualityRules.EpisodeCount(items),
-                        WinRate: Rate(items, e => e.Outcome!.Ret > 0),
-                        AvgReturn: items.Average(e => e.Outcome!.Ret ?? 0),
-                        AvgExcess: items.Average(e => e.Outcome!.Excess ?? 0),
-                        NetPositiveRate: Rate(items, e => e.Outcome!.NetPositive == true),
-                        StopHitRate: Rate(items, e => e.Outcome!.StopHit == true),
+                        NEpisodes: episodes.Count,
+                        WinRate: Rate(episodes, e => e.Outcome!.Ret > 0),
+                        AvgReturn: episodes.Average(e => e.Outcome!.Ret ?? 0),
+                        AvgExcess: episodes.Average(e => e.Outcome!.Excess ?? 0),
+                        NetPositiveRate: Rate(episodes, e => e.Outcome!.NetPositive == true),
+                        StopHitRate: Rate(episodes, e => e.Outcome!.StopHit == true),
                         Grade: grade.Grade,
                         GradeReason: grade.Reason,
                         TopSymbolShare: grade.TopSymbolShare,
-                        NBackfill: items.Count(e => e.Origin == "backfill"));
+                        NBackfill: episodes.Count(e => e.Origin == "backfill"));
                 }
 
                 var bySource = pool
@@ -192,12 +194,16 @@ internal static class RestEndpoints
                     .Select(g => Summarize(g.Key, g.ToList())!)
                     .ToList();
 
+                var windowEpisodes = SignalQualityRules.EpisodeRepresentatives(pool);
                 return Results.Ok(new SignalStatsResponse(
+                    WindowBasis: $"按记录时间近 {daysClamped} 天（回填样本的记录时间=运行时刻）",
+                    WindowEpisodes: windowEpisodes.Count,
+                    RealtimeEpisodes: windowEpisodes.Count(SignalQualityRules.IsRealtimeRecorded),
+                    RealtimeRequired: SignalQualityRules.RealtimeMinEpisodes,
                     TotalEvaluated: pool.Count,
                     Overall: Summarize("全部", pool),
                     BySource: bySource,
                     ByRegime: BuildBuckets("状态", pool, e => RegimeLabel(e.Adx)),
-                    ByAlignment: BuildBuckets("共振", pool, e => AlignmentLabel(e.TrendAligned)),
                     ByConfluence: BuildBuckets("级别共振", pool.Where(e => e.Confluence != null).ToList(),
                         e => ConfluenceTagger.Label(e.Confluence))));
             })
@@ -211,13 +217,6 @@ internal static class RestEndpoints
         >= 25 => "趋势市 ADX≥25",
         >= 20 => "过渡 20≤ADX<25",
         _ => "震荡市 ADX<20",
-    };
-
-    private static string AlignmentLabel(bool? aligned) => aligned switch
-    {
-        true => "顺大势",
-        false => "逆大势",
-        null => "无高周期数据",
     };
 
     private static IReadOnlyList<SignalBucketStats> BuildBuckets(

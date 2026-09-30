@@ -72,7 +72,6 @@ const recentSignals = computed(() => {
   return list.reverse().slice(0, 20)
 })
 
-const alignmentStats = computed(() => props.stats?.byAlignment ?? [])
 const regimeStats = computed(() => props.stats?.byRegime ?? [])
 
 const previewCount = computed(() => props.analysis?.signals.filter(s => !s.isConfirmed).length ?? 0)
@@ -276,7 +275,7 @@ function sideColor(side: string) {
           <span class="chev" :class="{ open: statsOpen }">›</span>
           <template v-if="stats && stats.overall">
             <span class="stats-line">
-              近90天 · {{ stats.overall.n }}例/{{ stats.overall.nEpisodes }}波 ·
+              近90天（按记录时间） · {{ stats.overall.n }}例/{{ stats.overall.nEpisodes }}波 ·
               整体<span :style="{ color: gradeColor(stats.overall.grade) }">{{ stats.overall.grade }}</span>
             </span>
           </template>
@@ -310,17 +309,21 @@ function sideColor(side: string) {
               {{ b.label }} {{ (b.winRate * 100).toFixed(0) }}%<i>({{ b.n }})</i>
             </span>
           </div>
-          <div v-if="alignmentStats.length" class="tbl-note">
-            <span class="k">按共振</span>
-            <span v-for="b in alignmentStats" :key="b.label" class="v" :title="`n=${b.n} · 超额 ${(b.avgExcess * 100).toFixed(2)}%`">
-              {{ shortLabel(b.label) }} {{ (b.winRate * 100).toFixed(0) }}%<i>({{ b.n }})</i>
-            </span>
-            <span class="flag" title="早期小样本中差异明显，样本增至数百后消失（49% vs 50%）：该过滤无显著预测力，仅作状态标注。">差异不显著</span>
-          </div>
           <div v-if="stats.overall" class="tbl-foot">
             分级依据：{{ stats.overall.gradeReason }}
           </div>
-          <div class="tbl-foot">持有 12 根 · 已扣费（现货往返 0.2%） · 门槛：独立波次 ≥30 且 t≥2 且扣费后为正 ≥50% 且中位超额 >0 且单标的 ≤50%</div>
+          <!-- 实盘晋升进度：让"离可实盘还差多少"可见，而不是只显示一个档位 -->
+          <div class="tbl-note gate">
+            <span class="k">实盘判据</span>
+            <span class="v">
+              实时波次 {{ stats.realtimeEpisodes }} / {{ stats.realtimeRequired }}
+              <i v-if="stats.realtimeEpisodes < stats.realtimeRequired">
+                （窗口共 {{ stats.windowEpisodes }} 波，还差 {{ stats.realtimeRequired - stats.realtimeEpisodes }} 波实时样本）
+              </i>
+              <i v-else>（样本量已达标，需同时满足 t≥2 · 中位超额>0 · 扣费后为正≥55% · 分半稳定 · 单标的≤40% · MAE≤1R）</i>
+            </span>
+          </div>
+          <div class="tbl-foot">{{ stats.windowBasis }} · 持有 12 根 · 已扣费（现货往返 0.2%） · 门槛：独立波次 ≥30 且 t≥2 且扣费后为正 ≥50% 且中位超额 >0 且单标的 ≤50%</div>
         </div>
       </div>
 
@@ -1205,3 +1208,6 @@ function sideColor(side: string) {
   margin-top: 40px;
 }
 </style>
+
+.tbl-note.gate .v { color: #9aa3b0; }
+.tbl-note.gate i { font-style: normal; color: #6b7280; }
