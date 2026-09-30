@@ -44,7 +44,6 @@ public sealed class SignalEntry
     public decimal? StopPrice { get; set; }
     /// <summary>结构参考价（缠论信号）：用于事后复核"入场是否已经追高"（滞后 ÷ 风险单位）。</summary>
     public decimal? ReferencePrice { get; set; }
-    public bool? TrendAligned { get; set; }
     /// <summary>级别共振标签（aligned/counter/none，仅缠论信号）。</summary>
     public string? Confluence { get; set; }
     public bool IsConfirmed { get; set; }
@@ -127,11 +126,11 @@ public sealed class SignalStore : IDisposable
             cmd.CommandText = """
                 INSERT OR IGNORE INTO signals
                     (market, base_asset, quote_asset, interval, source, kind, side, signal_time, is_confirmed,
-                     price, stop_price, reference_price, note, trend_aligned, confluence, adx, atr_pct,
+                     price, stop_price, reference_price, note, confluence, adx, atr_pct,
                      bandwidth_pct, origin, recorded_at, joint_score)
                 VALUES
                     ($market, $base, $quote, $interval, $source, $kind, $side, $time, $confirmed,
-                     $price, $stop, $reference, $note, $aligned, $confluence, $adx, $atrPct, $bandwidth,
+                     $price, $stop, $reference, $note, $confluence, $adx, $atrPct, $bandwidth,
                      $origin, $recordedAt, $jointScore);
                 """;
             cmd.Parameters.AddWithValue("$market", MarketKey(e.Market));
@@ -147,7 +146,6 @@ public sealed class SignalStore : IDisposable
             cmd.Parameters.AddWithValue("$stop", ToText(e.StopPrice));
             cmd.Parameters.AddWithValue("$reference", ToText(e.ReferencePrice));
             cmd.Parameters.AddWithValue("$note", e.Note ?? (object)DBNull.Value);
-            cmd.Parameters.AddWithValue("$aligned", e.TrendAligned is null ? DBNull.Value : e.TrendAligned.Value ? 1 : 0);
             cmd.Parameters.AddWithValue("$confluence", e.Confluence ?? (object)DBNull.Value);
             cmd.Parameters.AddWithValue("$adx", ToText(e.Adx));
             cmd.Parameters.AddWithValue("$atrPct", ToText(e.AtrPct));
@@ -280,7 +278,7 @@ public sealed class SignalStore : IDisposable
 
     private const string SelectPrefix = """
         SELECT id, market, base_asset, quote_asset, interval, source, kind, side, signal_time, is_confirmed,
-               price, stop_price, reference_price, note, trend_aligned, confluence, adx, atr_pct,
+               price, stop_price, reference_price, note, confluence, adx, atr_pct,
                bandwidth_pct, origin, recorded_at,
                outcome_status, outcome_ret, outcome_excess, outcome_mfe, outcome_mae,
                outcome_stop_hit, outcome_net_positive, outcome_evaluated_at,
@@ -308,7 +306,6 @@ public sealed class SignalStore : IDisposable
                 stop_price           TEXT,
                 reference_price      TEXT,
                 note                 TEXT,
-                trend_aligned        INTEGER,
                 confluence           TEXT,
                 adx                  TEXT,
                 atr_pct              TEXT,
@@ -385,27 +382,26 @@ public sealed class SignalStore : IDisposable
                 StopPrice = FromText(Text(reader, 11)),
                 ReferencePrice = FromText(Text(reader, 12)),
                 Note = Text(reader, 13),
-                TrendAligned = reader.IsDBNull(14) ? null : reader.GetInt32(14) == 1,
-                Confluence = Text(reader, 15),
-                Adx = FromText(Text(reader, 16)),
-                AtrPct = FromText(Text(reader, 17)),
-                BandwidthPct = FromText(Text(reader, 18)),
-                Origin = reader.GetString(19),
-                RecordedAt = reader.GetInt64(20),
-                JointScore = reader.IsDBNull(29) ? null : reader.GetInt32(29),
+                Confluence = Text(reader, 14),
+                Adx = FromText(Text(reader, 15)),
+                AtrPct = FromText(Text(reader, 16)),
+                BandwidthPct = FromText(Text(reader, 17)),
+                Origin = reader.GetString(18),
+                RecordedAt = reader.GetInt64(19),
+                JointScore = reader.IsDBNull(28) ? null : reader.GetInt32(28),
             };
             if (!reader.IsDBNull(21))
             {
                 entry.Outcome = new SignalOutcome
                 {
-                    Status = reader.GetString(21),
-                    Ret = FromText(Text(reader, 22)),
-                    Excess = FromText(Text(reader, 23)),
-                    Mfe = FromText(Text(reader, 24)),
-                    Mae = FromText(Text(reader, 25)),
-                    StopHit = reader.IsDBNull(26) ? null : reader.GetInt32(26) == 1,
-                    NetPositive = reader.IsDBNull(27) ? null : reader.GetInt32(27) == 1,
-                    EvaluatedAt = reader.IsDBNull(28) ? null : reader.GetInt64(28),
+                    Status = reader.GetString(20),
+                    Ret = FromText(Text(reader, 21)),
+                    Excess = FromText(Text(reader, 22)),
+                    Mfe = FromText(Text(reader, 23)),
+                    Mae = FromText(Text(reader, 24)),
+                    StopHit = reader.IsDBNull(25) ? null : reader.GetInt32(25) == 1,
+                    NetPositive = reader.IsDBNull(26) ? null : reader.GetInt32(26) == 1,
+                    EvaluatedAt = reader.IsDBNull(27) ? null : reader.GetInt32(27),
                 };
             }
             list.Add(entry);
@@ -475,7 +471,6 @@ public sealed class SignalStore : IDisposable
                 Note = legacy.Note,
                 StopPrice = legacy.StopPrice,
                 ReferencePrice = legacy.ReferencePrice,
-                TrendAligned = legacy.TrendAligned,
                 Confluence = legacy.Confluence,
                 IsConfirmed = legacy.IsConfirmed,
                 Adx = legacy.Adx,
@@ -516,7 +511,6 @@ public sealed class SignalStore : IDisposable
         [JsonPropertyName("note")] public string? Note { get; set; }
         [JsonPropertyName("stopPrice")] public decimal? StopPrice { get; set; }
         [JsonPropertyName("referencePrice")] public decimal? ReferencePrice { get; set; }
-        [JsonPropertyName("trendAligned")] public bool? TrendAligned { get; set; }
         [JsonPropertyName("confluence")] public string? Confluence { get; set; }
         [JsonPropertyName("isConfirmed")] public bool IsConfirmed { get; set; }
         [JsonPropertyName("adx")] public decimal? Adx { get; set; }

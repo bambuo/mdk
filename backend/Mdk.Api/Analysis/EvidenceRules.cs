@@ -7,7 +7,7 @@ namespace Mdk.Api.Analysis;
 /// 某语境（来源 × 类别 × 周期）下的信号可信度——由**台账里的实际结果**算出，
 /// 而不是启发式分数。样本不足时 <see cref="Sufficient"/> 为 false，界面必须显示"样本不足"而非给出胜率。
 /// </summary>
-public sealed record CredibilityBucket(
+public sealed record EvidenceBucket(
     /// <summary>买卖点类别（如 "3买"）。精简为纯缠论后不再需要来源维度。</summary>
     string? Kind,
     string Interval,
@@ -34,7 +34,7 @@ public sealed record CredibilityBucket(
 /// 可信度口径（纯函数，可独立测试）。行业做法：**不给没有样本支撑的"置信度"**，
 /// 给出经验频率 + 置信区间，样本不足就明说；中位数与扣费后口径优先于均值。
 /// </summary>
-public static class SignalCredibilityRules
+public static class EvidenceRules
 {
     /// <summary>可给出胜率徽章的最低独立波次数（与分级规则一致：少于此时只显示"样本不足"）。</summary>
     public const int MinEpisodes = 30;
@@ -42,7 +42,7 @@ public static class SignalCredibilityRules
     /// <summary>95% 正态分位（Wilson 区间用）。</summary>
     private const decimal Z = 1.96m;
 
-    public static CredibilityBucket Build(
+    public static EvidenceBucket Build(
         string? kind, string interval, IReadOnlyList<SignalEntry> items)
     {
         var episodes = SignalQualityRules.EpisodeRepresentatives(items);
@@ -60,7 +60,7 @@ public static class SignalCredibilityRules
             .Select(e => Math.Abs(e.Price - e.StopPrice!.Value) / e.Price)
             .ToList();
 
-        return new CredibilityBucket(
+        return new EvidenceBucket(
             Kind: kind,
             Interval: interval,
             N: items.Count,
@@ -79,7 +79,7 @@ public static class SignalCredibilityRules
     /// 只统计已评估样本，排除锚定币；同一信号先以「盘中预警」再以「收盘确认」各记一条时，
     /// 按信号本体去重并优先确认版本。与 AnalysisService 的可信度表同一口径，供监控页等复用。
     /// </summary>
-    public static CredibilityBucket BuildFromStore(
+    public static EvidenceBucket BuildFromStore(
         string? kind, string interval, MarketKind market, IReadOnlyList<SignalEntry> snapshot)
     {
         var items = snapshot

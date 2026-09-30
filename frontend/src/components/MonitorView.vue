@@ -37,7 +37,7 @@ const symbolOptions = computed(() =>
  * 口径与查看页一致——不给未校准的"置信度"，波次不足时明说"样本不足"。
  */
 function credText(sig: WatchlistSignalView): string {
-  const b = sig.credibility
+  const b = sig.evidence
   if (!b) return sig.source === '缠论' ? '无历史样本' : '—'
   if (!b.sufficient) return `样本不足 · ${b.nEpisodes}波`
   const half = Math.round((b.winRateHigh - b.winRateLow) * 50)
@@ -45,7 +45,7 @@ function credText(sig: WatchlistSignalView): string {
 }
 
 function credClass(sig: WatchlistSignalView): string {
-  const b = sig.credibility
+  const b = sig.evidence
   if (!b || !b.sufficient) return 'unknown'
   return b.netPositiveRate >= 0.5 ? 'good' : b.netPositiveRate >= 0.42 ? 'mid' : 'weak'
 }
@@ -57,7 +57,7 @@ function rowTitle(sig: WatchlistSignalView): string {
 }
 
 function credTitle(sig: WatchlistSignalView): string {
-  const b = sig.credibility
+  const b = sig.evidence
   if (!b) return sig.source === '缠论' ? '该语境暂无已评估样本' : '证据强度仅对缠论买卖点定义，指标状态不评级'
   const pct = (v: number) => `${Math.round(v * 100)}%`
   return [

@@ -222,7 +222,6 @@ public sealed class SignalBackfillService(
                 Note = $"[{s.Kind}] {s.Note}",
                 StopPrice = s.StopPrice,
                 ReferencePrice = s.ReferencePrice,
-                TrendAligned = s.TrendAligned,
                 Confluence = s.Confluence,
                 IsConfirmed = true,
                 Adx = s.Adx,

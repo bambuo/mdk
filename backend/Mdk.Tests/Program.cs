@@ -14,7 +14,7 @@ public static class Program
         TradingPairTests.Register(kit);
         DecimalJsonTests.Register(kit);
         SignalStoreTests.Register(kit);
-        CredibilityTests.Register(kit);
+        EvidenceTests.Register(kit);
         StructurePositionTests.Register(kit);
         WilderSmoothingTests.Register(kit);
         RsiTests.Register(kit);

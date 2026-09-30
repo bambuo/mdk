@@ -12,7 +12,6 @@ public sealed record PriceLevel(string Kind, decimal Price, int Strength, decima
 /// <summary>
 /// 买卖点信号。Side：buy=买点（做多），sell=卖点（做空）。
 /// IsConfirmed：true=基于已收盘K线确认（不可撤销）；false=盘中预警（基于未收盘K线，可能消失）。
-/// TrendAligned：信号方向与高周期趋势（高一期 EMA50）是否同向；高周期数据不可用时为 null。
 /// Adx/AtrPct/BandwidthPct：信号发生时的市场状态（用于事后按状态统计，判断信号的状态依赖性）。
 /// </summary>
 public sealed record TradeSignal(
@@ -23,7 +22,6 @@ public sealed record TradeSignal(
     string Note,
     decimal? StopPrice,
     bool IsConfirmed,
-    bool? TrendAligned,
     decimal? Adx = null,
     decimal? AtrPct = null,
     decimal? BandwidthPct = null,
@@ -140,7 +138,7 @@ public sealed record AnalysisResult(
     /// 可信度表：按「来源 × 类别 × 周期」给出该语境在台账里的经验统计（样本量/胜率与区间/扣费后为正）。
     /// 前端按 (source, kind, interval) 查表给每个信号显示徽章；样本不足时只显示"样本不足"。
     /// </summary>
-    IReadOnlyList<CredibilityBucket>? Credibility = null);
+    IReadOnlyList<EvidenceBucket>? Evidence = null);
 
 public sealed record KlinesResponse(
     string Market,

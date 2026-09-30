@@ -7,7 +7,7 @@ namespace Mdk.Tests;
 /// 可信度口径：锚定币判定（领域规则）、经验胜率与 Wilson 区间、样本不足的如实标记、
 /// 中位超额与典型风险单位（抗极值口径）。
 /// </summary>
-public static class CredibilityTests
+public static class EvidenceTests
 {
     public static void Register(TestKit t)
     {
@@ -42,7 +42,7 @@ public static class CredibilityTests
             // 3买：记在 83752.01，结构参考点 83664.01（中枢上沿），止损 83898.31
             var sig = new TradeSignal(
                 Time: 1, Side: "sell", Source: "缠论", Price: 83752.01m, Note: "", StopPrice: 83898.31409564m,
-                IsConfirmed: true, TrendAligned: null, ReferencePrice: 83664.01m, Kind: "3卖");
+                IsConfirmed: true, ReferencePrice: 83664.01m, Kind: "3卖");
             Assert.Equal(0.00174687m, sig.RiskPct!.Value, 8);
             Assert.Equal(0.00105072m, sig.EntryLagPct!.Value, 8);
             Assert.Equal(0.60149m, sig.LagShare!.Value, 5);
@@ -52,7 +52,7 @@ public static class CredibilityTests
         {
             var sig = new TradeSignal(
                 Time: 1, Side: "buy", Source: "EMA", Price: 100m, Note: "", StopPrice: 98m,
-                IsConfirmed: true, TrendAligned: null);
+                IsConfirmed: true);
             Assert.Equal(0.02m, sig.RiskPct!.Value, 6);
             Assert.Equal(true, sig.EntryLagPct is null);
             Assert.Equal(true, sig.LagShare is null);
@@ -62,27 +62,27 @@ public static class CredibilityTests
         {
             var sig = new TradeSignal(
                 Time: 1, Side: "buy", Source: "RSI", Price: 100m, Note: "", StopPrice: null,
-                IsConfirmed: true, TrendAligned: null, ReferencePrice: 95m);
+                IsConfirmed: true, ReferencePrice: 95m);
             Assert.Equal(true, sig.RiskPct is null);
             Assert.Equal(true, sig.LagShare is null);
             Assert.Equal(0.05m, sig.EntryLagPct!.Value, 6);   // 滞后仍可算（有参考价即可）
         });
 
-        // ─────────────────── 可信度统计 ───────────────────
+        // ─────────────────── 证据强度统计 ───────────────────
 
-        t.Case("可信度_样本不足时不给胜率", () =>
+        t.Case("证据强度_样本不足时不给胜率", () =>
         {
             var items = Entries(wins: 5, losses: 5, symbol: "BTCUSDT");
-            var bucket = SignalCredibilityRules.Build("3买", "1h", items);
+            var bucket = EvidenceRules.Build("3买", "1h", items);
             Assert.Equal(false, bucket.Sufficient);
             Assert.Equal(10, bucket.NEpisodes);
         });
 
-        t.Case("可信度_胜率与Wilson区间_样本充足", () =>
+        t.Case("证据强度_胜率与Wilson区间_样本充足", () =>
         {
             // 40 波、24 胜 → 60%；区间应包住点估计且落在 [0,1] 内
             var items = Entries(wins: 24, losses: 16, symbol: "BTCUSDT", spreadOverSymbols: true);
-            var bucket = SignalCredibilityRules.Build("3买", "1h", items);
+            var bucket = EvidenceRules.Build("3买", "1h", items);
             Assert.Equal(true, bucket.Sufficient);
             Assert.Equal(40, bucket.NEpisodes);
             Assert.Equal(0.6m, bucket.WinRate, 6);
@@ -90,20 +90,20 @@ public static class CredibilityTests
             Assert.Equal(true, bucket.WinRateLow >= 0m && bucket.WinRateHigh <= 1m);
         });
 
-        t.Case("可信度_Wilson区间_随样本收窄且不越界", () =>
+        t.Case("证据强度_Wilson区间_随样本收窄且不越界", () =>
         {
-            var small = SignalCredibilityRules.Wilson(6, 10);
-            var large = SignalCredibilityRules.Wilson(600, 1000);
+            var small = EvidenceRules.Wilson(6, 10);
+            var large = EvidenceRules.Wilson(600, 1000);
             Assert.Equal(true, large.High - large.Low < small.High - small.Low);
-            var extreme = SignalCredibilityRules.Wilson(0, 5);
+            var extreme = EvidenceRules.Wilson(0, 5);
             Assert.Equal(true, extreme.Low >= 0m && extreme.High <= 1m);
             Assert.Equal(true, extreme.High < 1m);      // 小样本全败也不给"必然失败"
-            var empty = SignalCredibilityRules.Wilson(0, 0);
+            var empty = EvidenceRules.Wilson(0, 0);
             Assert.Equal(0m, empty.Low);
             Assert.Equal(1m, empty.High);
         });
 
-        t.Case("可信度_中位数口径_不被极值带偏", () =>
+        t.Case("证据强度_中位数口径_不被极值带偏", () =>
         {
             // 9 条微亏 + 1 条巨赢：均值会显示为正，中位数必须为负（避免"平均超额"误导）
             var items = new List<SignalEntry>();
@@ -116,7 +116,7 @@ public static class CredibilityTests
                     excess: bigWin ? 0.40m : -0.001m,
                     price: 100m, stop: 98m));
             }
-            var bucket = SignalCredibilityRules.Build("3买", "1h", items);
+            var bucket = EvidenceRules.Build("3买", "1h", items);
             Assert.Equal(true, bucket.MedianExcess < 0m);
             Assert.Equal(0.02m, bucket.MedianRiskPct, 6);   // |100−98|/100
         });
@@ -134,13 +134,13 @@ public static class CredibilityTests
             Assert.Equal(false, SignalQualityRules.IsRealtimeRecorded(backfill));
         });
 
-        t.Case("可信度_扣费后为正按波次口径统计", () =>
+        t.Case("证据强度_扣费后为正按波次口径统计", () =>
         {
             var items = new List<SignalEntry>();
             for (var i = 0; i < 40; i++)
                 items.Add(Entry("AAAUSDT", 1_000_000 + i * 30 * 3600L, ret: 0.01m, excess: 0.005m,
                     price: 100m, stop: 98m, netPositive: i % 4 != 0));   // 3/4 扣费后为正
-            var bucket = SignalCredibilityRules.Build("3买", "1h", items);
+            var bucket = EvidenceRules.Build("3买", "1h", items);
             Assert.Equal(0.75m, bucket.NetPositiveRate, 6);
         });
     }

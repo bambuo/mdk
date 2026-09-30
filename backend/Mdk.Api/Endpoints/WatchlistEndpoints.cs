@@ -14,7 +14,7 @@ internal static class WatchlistEndpoints
         string Interval, string Source, string? Kind, string Side, long Time, decimal Price,
         decimal? StopPrice, string? Note, string? Confluence, bool IsConfirmed, long RecordedAt,
         /// <summary>同语境（缠论类别 × 周期）的经验可信度；指标信号不评级（可信度仅对缠论结构定义）。</summary>
-        CredibilityBucket? Credibility);
+        EvidenceBucket? Evidence);
 
     public static void Map(WebApplication app)
     {
@@ -87,7 +87,7 @@ internal static class WatchlistEndpoints
                     .Select(e => (e.Market, e.Interval, e.Kind)).Distinct()
                     .ToDictionary(
                         key => key,
-                        key => SignalCredibilityRules.BuildFromStore(key.Kind, key.Interval, key.Market, snapshot));
+                        key => EvidenceRules.BuildFromStore(key.Kind, key.Interval, key.Market, snapshot));
                 return Results.Ok(rows.Select(e => new WatchlistSignalView(
                     e.Market.ToString().ToLowerInvariant(), e.Pair.Symbol, e.Pair.BaseAsset, e.Pair.QuoteAsset,
                     e.Interval, e.Source, e.Kind, e.Side, e.Time, e.Price, e.StopPrice, e.Note, e.Confluence,

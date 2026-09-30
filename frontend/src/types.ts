@@ -33,7 +33,7 @@ export interface SymbolQuote {
 }
 
 /** 台账里同语境（类别 × 周期）的经验表现——界面徽章只陈述证据，不给"置信度分数" */
-export interface CredibilityBucket {
+export interface EvidenceBucket {
   kind: string | null
   interval: string
   /** 原始样本数 */
@@ -221,7 +221,7 @@ export interface AnalysisResult {
   chan: ChanSummary | null
   chanLevels: ChanLevelStructure[] | null
   /** 可信度表（按 来源 × 类别 分组）：界面据此给每个信号显示经验表现徽章 */
-  credibility?: CredibilityBucket[] | null
+  evidence?: EvidenceBucket[] | null
 }
 
 /** 图表指标显示开关 */
@@ -344,5 +344,5 @@ export interface WatchlistSignalView {
   confluence: string | null
   isConfirmed: boolean
   recordedAt: number
-  credibility: CredibilityBucket | null
+  evidence: EvidenceBucket | null
 }

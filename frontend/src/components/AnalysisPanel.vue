@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, ref } from 'vue'
-import type { AnalysisResult, CredibilityBucket, SignalStatsResponse, TradeSignal } from '../types'
+import type { AnalysisResult, EvidenceBucket, SignalStatsResponse, TradeSignal } from '../types'
 import { formatPct, formatPrice, formatTime, formatTimeFull } from '../utils'
 
 const props = defineProps<{
@@ -122,21 +122,21 @@ const levelName = (level: string) => (level === 'higher' ? '高级别' : level =
 /**
  * 证据强度徽章：按 (来源, 类别) 到台账经验表里查同语境的**实际表现**，
  * 不做加权、不给"置信度分数"——只陈述样本量、胜率区间与扣费后为正比例；
- * 波次不足时明确显示"样本不足"（口径见后端 SignalCredibilityRules）。
+ * 波次不足时明确显示"样本不足"（口径见后端 EvidenceRules）。
  */
-const credibilityMap = computed(() => {
-  const map = new Map<string, CredibilityBucket>()
-  for (const bucket of props.analysis?.credibility ?? []) {
+const evidenceMap = computed(() => {
+  const map = new Map<string, EvidenceBucket>()
+  for (const bucket of props.analysis?.evidence ?? []) {
     map.set(bucket.kind ?? '', bucket)
   }
   return map
 })
 
-function bucketOf(sig: TradeSignal): CredibilityBucket | null {
-  return credibilityMap.value.get(sig.kind ?? '') ?? null
+function bucketOf(sig: TradeSignal): EvidenceBucket | null {
+  return evidenceMap.value.get(sig.kind ?? '') ?? null
 }
 
-function credibilityText(sig: TradeSignal): string {
+function evidenceText(sig: TradeSignal): string {
   const bucket = bucketOf(sig)
   if (!bucket) return '无历史样本'
   if (!bucket.sufficient) return `样本不足 · ${bucket.nEpisodes}波`
@@ -144,7 +144,7 @@ function credibilityText(sig: TradeSignal): string {
   return `证据 ${Math.round(bucket.winRate * 100)}%±${halfWidth} · ${bucket.nEpisodes}波`
 }
 
-function credibilityClass(sig: TradeSignal): string {
+function evidenceClass(sig: TradeSignal): string {
   const bucket = bucketOf(sig)
   if (!bucket || !bucket.sufficient) return 'unknown'
   if (bucket.netPositiveRate >= 0.5) return 'good'
@@ -398,7 +398,7 @@ function sideColor(side: string) {
             </div>
             <div class="signal-sub">
               <a-tooltip position="left">
-                <span class="cred-badge" :class="credibilityClass(sig)">{{ credibilityText(sig) }}</span>
+                <span class="cred-badge" :class="evidenceClass(sig)">{{ evidenceText(sig) }}</span>
                 <template #content>
                   <div class="cred-tip">
                     <div class="cred-tip-title">

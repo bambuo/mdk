@@ -12,11 +12,11 @@ public sealed class AnalysisService(
     SignalStore store)
 {
     private static readonly TimeSpan HtfCacheTtl = TimeSpan.FromSeconds(60);
-    private static readonly TimeSpan CredibilityCacheTtl = TimeSpan.FromSeconds(60);
+    private static readonly TimeSpan EvidenceCacheTtl = TimeSpan.FromSeconds(60);
 
     /// <summary>可信度表缓存（键 = 市场|周期）：台账只增不改，60s 内的统计不会影响使用判断。</summary>
-    private readonly ConcurrentDictionary<string, (IReadOnlyList<CredibilityBucket> Buckets, DateTimeOffset At)>
-        _credibilityCache = new();
+    private readonly ConcurrentDictionary<string, (IReadOnlyList<EvidenceBucket> Buckets, DateTimeOffset At)>
+        _evidenceCache = new();
 
     private readonly Chan.ChanOptions _chanOptions = chanOptions.Value;
     private readonly ConcurrentDictionary<string, (IReadOnlyList<Models.Candle> Candles, DateTimeOffset At)> _htfCache = new();
@@ -83,7 +83,7 @@ public sealed class AnalysisService(
         var result = AnalysisEngine.Compute(market, pair, interval, candles, htf, htfInterval,
             chanOptions, chanWindow, subLevel, subLevelInterval, lowerLevel, lowerLevelInterval);
         RecordSignals(market, pair, interval, result);
-        return result with { Credibility = GetCredibilityCached(market, interval) };
+        return result with { Evidence = GetEvidenceCached(market, interval) };
     }
 
     /// <summary>把本次分析产出的信号写入台账（自然键去重：同一信号只记一条）。</summary>
@@ -107,7 +107,6 @@ public sealed class AnalysisService(
                 Note = sig.Note,
                 StopPrice = sig.StopPrice,
                 ReferencePrice = sig.ReferencePrice,
-                TrendAligned = sig.TrendAligned,
                 Confluence = sig.Confluence,
                 IsConfirmed = sig.IsConfirmed,
                 Adx = sig.Adx,
@@ -124,11 +123,11 @@ public sealed class AnalysisService(
     /// 给出经验胜率与 Wilson 区间、扣费后为正比例、中位超额与典型风险单位。
     /// 只做统计、不做筛选：样本不足的语境如实标记 <c>Sufficient=false</c>。
     /// </summary>
-    private IReadOnlyList<CredibilityBucket> GetCredibilityCached(MarketKind market, string interval)
+    private IReadOnlyList<EvidenceBucket> GetEvidenceCached(MarketKind market, string interval)
     {
         var key = $"{market}|{interval}";
-        if (_credibilityCache.TryGetValue(key, out var cached)
-            && DateTimeOffset.UtcNow - cached.At < CredibilityCacheTtl)
+        if (_evidenceCache.TryGetValue(key, out var cached)
+            && DateTimeOffset.UtcNow - cached.At < EvidenceCacheTtl)
         {
             return cached.Buckets;
         }
@@ -146,11 +145,11 @@ public sealed class AnalysisService(
 
         var buckets = pool
             .GroupBy(e => e.Kind)
-            .Select(g => SignalCredibilityRules.Build(g.Key, interval, g.ToList()))
+            .Select(g => EvidenceRules.Build(g.Key, interval, g.ToList()))
             .OrderByDescending(b => b.NEpisodes)
             .ToList();
 
-        _credibilityCache[key] = (buckets, DateTimeOffset.UtcNow);
+        _evidenceCache[key] = (buckets, DateTimeOffset.UtcNow);
         return buckets;
     }
 

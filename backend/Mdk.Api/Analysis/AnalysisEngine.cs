@@ -138,7 +138,6 @@ public static class AnalysisEngine
                     Note: $"[{p.Kind}] {p.Note}",
                     StopPrice: p.StopPrice,
                     IsConfirmed: true,
-                    TrendAligned: null,
                     Adx: regime.Adx,
                     AtrPct: regime.AtrPct,
                     BandwidthPct: regime.BandwidthPct,
