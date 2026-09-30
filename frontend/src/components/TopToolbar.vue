@@ -59,7 +59,8 @@ const marketOptions: { value: MarketKind; label: string }[] = [
   { value: 'futures', label: '合约' },
 ]
 
-const intervals = ['15m', '30m', '1h', '4h', '1d', '1w']
+// 最小档 5m（后端白名单含 5m；监控页可选更多档位，此处只留常用档以保持工具栏简洁）
+const intervals = ['5m', '15m', '30m', '1h', '4h', '1d', '1w']
 
 /**
  * 图层开关分两档：主开关（结构、信号）常显，其余收进「更多图层」——
