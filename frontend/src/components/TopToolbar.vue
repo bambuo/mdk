@@ -40,6 +40,12 @@ const pushAgeText = computed(() => {
 
 const pushStale = computed(() => props.lastPushAt != null && now.value - props.lastPushAt > 15000)
 
+/** 时间格的悬停说明：说清"多久前"指的是最后一次收到数据，而非撮合时间 */
+const pushAgeTitle = computed(() =>
+  props.lastPushAt == null
+    ? '尚未收到数据推送'
+    : `最后一次收到K线数据：${pushAgeText.value}（合约市场若走 REST 轮询兜底，粒度为 5 秒）`)
+
 const emit = defineEmits<{
   (e: 'toggle-notify'): void
   (e: 'update:market', value: MarketKind): void
@@ -200,7 +206,9 @@ const displayChangePct = computed(() => {
       </a-button>
     </a-tooltip>
     <span class="status" :class="{ 'status-stale': pushStale }">
-      <a-badge :status="statusMeta.color as any" :text="`${statusMeta.text} · ${pushAgeText}`" />
+      <a-badge :status="statusMeta.color as any" :text="statusMeta.text" />
+      <!-- 定宽时间格：轮询兜底时文字在「实时 / Ns 前」间变化，宽度固定才不会推动左侧整排 -->
+      <span class="status-age" :title="pushAgeTitle">{{ pushAgeText }}</span>
     </span>
     <a-spin v-if="loading" :size="16" class="loading-dot" />
   </div>
@@ -293,6 +301,21 @@ const displayChangePct = computed(() => {
 }
 
 .status {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  /* 固定整块宽度：状态文案固定、时间格定宽，二者相加即常量 → 左侧整排不会随秒数跳动 */
+  min-width: 116px;
+  justify-content: flex-end;
+}
+
+.status-age {
+  display: inline-block;
+  min-width: 44px;
+  text-align: right;
+  /* 等宽数字：'3s 前' 与 '13s 前' 的宽度差不再影响布局 */
+  font-variant-numeric: tabular-nums;
+  color: #6b7280;
   white-space: nowrap;
 }
 
