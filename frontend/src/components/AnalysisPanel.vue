@@ -82,6 +82,18 @@ const previewCount = computed(() => props.analysis?.signals.filter(s => !s.isCon
  */
 const position = computed(() => props.analysis?.chan?.position ?? null)
 
+/** 关注度（后端确定性判定；旧后端可能为空） */
+const attention = computed(() => props.analysis?.chan?.position?.attention ?? null)
+
+/** 五条规则：与后端 AttentionRules.Rules 同源（界面文案副本，改口径须两处同改） */
+const attentionRules = [
+  '① 结构链：包含处理 → 分型 → 笔 → 中枢 → 背驰 → 买卖点；笔≥3 构成中枢（多空成本区）',
+  '② 只做三类位置：中枢边缘回抽不破（3类，顺势）／趋势末端背驰（1类，逆势最难）／一类后首次回抽（2类）',
+  '③ 确认才作数：只有已确认的笔产生买卖点；信号记在确认那根K线，你看到时价格已离开参考点',
+  '④ 止损=结构失效位：价格回到买卖点所依据的参考极值，前提即不成立',
+  '⑤ 三不做：中枢内震荡不猜方向；距中枢 >2×ATR 的趋势中段不追；已走 >1R 不进场',
+]
+
 function zoneLabel(zone: string | null | undefined): string {
   if (zone === 'above') return '中枢上方'
   if (zone === 'below') return '中枢下方'
@@ -210,6 +222,38 @@ function sideColor(side: string) {
 
 <template>
   <template v-if="analysis">
+    <!-- 关注度（置顶）：页面第一眼回答"此刻是否值得看单"——由结构位置确定性推出 -->
+    <section v-if="attention" class="card attn-card" :class="attention.level">
+      <div class="attn-head">
+        <span class="attn-dot" />
+        <span class="attn-headline">{{ attention.headline }}</span>
+        <span class="flex-spacer" />
+        <a-popover trigger="hover" position="left">
+          <span class="attn-rules">规则速查 ⓘ</span>
+          <template #content>
+            <div class="cred-tip">
+              <div class="cred-tip-title">缠论（本系统口径）五条规则</div>
+              <div v-for="(r, i) in attentionRules" :key="i" class="rule-line">{{ r }}</div>
+              <div class="cred-tip-foot">规则只界定"结构上是否到了决策位"；本项目实测扣费后无统计优势，不构成投资建议</div>
+            </div>
+          </template>
+        </a-popover>
+      </div>
+      <ul class="attn-facts">
+        <li v-for="(f, i) in attention.facts" :key="i">{{ f }}</li>
+      </ul>
+      <div class="attn-body">
+        <span class="k">为什么</span><span class="v">{{ attention.why }}</span>
+        <span class="k">怎么做</span><span class="v">{{ attention.how }}</span>
+        <template v-if="attention.dont">
+          <span class="k">别做</span><span class="v warn">{{ attention.dont }}</span>
+        </template>
+      </div>
+    </section>
+
+    <details class="detail-fold">
+      <summary>细节（结构位置 / 买卖点 / 趋势 / 点位）</summary>
+
     <!-- 结构位置（确定性）：页面第一眼回答"价格在结构的哪里" -->
     <section v-if="analysis.chan" class="card pos-card">
       <h3 class="card-title">
@@ -515,12 +559,109 @@ function sideColor(side: string) {
         <div v-if="!supports.length" class="level-empty">下方暂无明显支撑</div>
       </div>
     </section>
+    </details>
 
   </template>
   <a-empty v-else description="暂无分析数据" class="panel-empty" />
 </template>
 
 <style scoped>
+/* ── 关注度卡（置顶） ── */
+.attn-card {
+  border-left: 3px solid #2a2f38;
+}
+
+.attn-card.focus { border-left-color: #26a69a; }
+.attn-card.watch { border-left-color: #f0b90b; }
+.attn-card.chase { border-left-color: #ef5350; }
+.attn-card.none,
+.attn-card.wait { border-left-color: #3a4048; }
+
+.attn-head {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.attn-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: #3a4048;
+  flex: 0 0 auto;
+}
+
+.attn-card.focus .attn-dot { background: #26a69a; }
+.attn-card.watch .attn-dot { background: #f0b90b; }
+.attn-card.chase .attn-dot { background: #ef5350; }
+
+.attn-headline {
+  flex: 0 1 auto;
+  min-width: 0;
+}
+
+.attn-rules {
+  font-size: 11px;
+  font-weight: 400;
+  color: #6b7280;
+  border-bottom: 1px dashed #3a4048;
+  cursor: help;
+  white-space: nowrap;
+}
+
+.attn-facts {
+  margin: 6px 0 8px;
+  padding-left: 14px;
+  font-size: 11px;
+  color: #9aa3b0;
+  line-height: 1.7;
+}
+
+.attn-body {
+  display: grid;
+  grid-template-columns: 46px 1fr;
+  row-gap: 4px;
+  column-gap: 8px;
+  font-size: 12px;
+}
+
+.attn-body .k { color: #6b7280; }
+.attn-body .v { color: #c3c8d0; }
+.attn-body .v.warn { color: #f0b90b; }
+
+.rule-line {
+  line-height: 1.8;
+}
+
+/* ── 细节折叠区 ── */
+.detail-fold > summary {
+  margin: 2px 0 10px;
+  padding: 5px 8px;
+  font-size: 11px;
+  color: #6b7280;
+  border: 1px dashed #23262e;
+  border-radius: 4px;
+  cursor: pointer;
+  list-style: none;
+}
+
+.detail-fold > summary::-webkit-details-marker { display: none; }
+
+.detail-fold > summary::before {
+  content: '▸ ';
+}
+
+.detail-fold[open] > summary::before {
+  content: '▾ ';
+}
+
+.detail-fold > summary:hover {
+  color: #9aa3b0;
+  border-color: #3a4048;
+}
+
 /* ── 结构位置（确定性面板） ── */
 .pos-card .pos-headline {
   display: flex;
@@ -1344,7 +1485,6 @@ function sideColor(side: string) {
 .panel-empty {
   margin-top: 40px;
 }
-</style>
-
 .tbl-note.gate .v { color: #9aa3b0; }
 .tbl-note.gate i { font-style: normal; color: #6b7280; }
+</style>

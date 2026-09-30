@@ -53,12 +53,20 @@ public sealed record StructurePosition(
     /// <summary>最近买卖点类别 / 距今根数（事实陈述，不含绩效推断）。</summary>
     string? LastKind,
     int? BarsSinceLastSignal,
+    /// <summary>最近买卖点的记账价（入场参考）。</summary>
+    decimal? LastSignalPrice,
+    /// <summary>最近买卖点的背驰面积比（仅 1/2 类有值；≤0.7 属强背驰）。</summary>
+    decimal? LastAreaRatio,
+    /// <summary>已走 R：现价相对最近买卖点入场价走过的幅度 ÷ 该信号的风险单位（&gt;1 说明成本已吃掉一个风险单位）。</summary>
+    decimal? MovedR,
     /// <summary>各级别中枢归属对照（高周期 / 本级别 / 次级别，缺数据则无该项）。</summary>
     IReadOnlyList<LevelPosition> Levels,
     /// <summary>多级别归属是否一致：aligned=各级别同侧 / mixed=分歧 / single=只有本级别有中枢。</summary>
     string CrossLevel,
     /// <summary>一句话人话描述（可直接展示）。</summary>
-    string Summary);
+    string Summary,
+    /// <summary>关注度判定（确定性）：把结构位置翻译为"此刻是否值得看单"，见 <see cref="AttentionRules"/>。</summary>
+    AttentionRules.Verdict? Attention = null);
 
 /// <summary>
 /// 结构位置计算（纯函数，可独立测试）。所有度量都由 K 线与缠论结构直接算出，不含统计推断。
@@ -138,6 +146,14 @@ public static class StructurePositionCalculator
             if (idx >= 0) barsSince = lastIndex - idx;
         }
 
+        // 已走 R：价格自最近买卖点入场后走过的幅度（以该信号的风险单位为分母）
+        decimal? movedR = null;
+        if (lastPoint is { } lp2 && stopRef is { } sr && last > 0m)
+        {
+            var risk = Math.Abs(lp2.Price - sr);
+            if (risk > 0m) movedR = Math.Abs(last - lp2.Price) / risk;
+        }
+
         var crossLevel = CrossLevelOf(levels, zone);
         var summary = Describe(strokeOrNull?.IsUp, strokeOrNull?.IsConfirmed ?? false, retrace,
             zone, pivot is not null, pivotStrokes, edgeDistanceAtr, edgeDistancePct,
@@ -162,6 +178,9 @@ public static class StructurePositionCalculator
             DistanceToStopReferencePct: stopDistance,
             LastKind: lastPoint?.Kind,
             BarsSinceLastSignal: lastPoint is null ? null : barsSince,
+            LastSignalPrice: lastPoint?.Price,
+            LastAreaRatio: lastPoint?.AreaRatio,
+            MovedR: movedR,
             Levels: levels,
             CrossLevel: crossLevel,
             Summary: summary);

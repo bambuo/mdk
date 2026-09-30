@@ -275,7 +275,9 @@ public static class AnalysisEngine
         var levelPositions = (levels ?? [])
             .Select(lv => ToLevelPosition(lv, last))
             .ToList();
-        return StructurePositionCalculator.Compute(candles, result, atr, levelPositions);
+        var position = StructurePositionCalculator.Compute(candles, result, atr, levelPositions);
+        // 关注度：由结构位置确定性推出（见 AttentionRules），界面置顶展示
+        return position with { Attention = AttentionRules.Evaluate(position) };
     }
 
     /// <summary>某个级别的中枢归属（用该级别自己的中枢上下沿与同一现价判定）。</summary>

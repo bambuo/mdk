@@ -138,10 +138,28 @@ export interface StructurePosition {
   distanceToStopReferencePct: number | null
   lastKind: string | null
   barsSinceLastSignal: number | null
+  /** 最近买卖点的记账价（入场参考） */
+  lastSignalPrice: number | null
+  /** 最近买卖点的背驰面积比（仅 1/2 类有值；≤0.7 强背驰） */
+  lastAreaRatio: number | null
+  /** 已走 R：现价相对最近买卖点入场价走过的幅度 ÷ 该信号风险单位（>1 = 成本已吃掉一个风险单位） */
+  movedR: number | null
   levels: LevelPosition[]
   crossLevel: 'aligned' | 'mixed' | 'single' | 'none'
   /** 一句话人话描述（可直接展示） */
   summary: string
+  /** 关注度判定（确定性）：focus 重点关注 / watch 可以关注 / wait 等确认 / none 暂不关注 / chase 不追 */
+  attention?: AttentionVerdict | null
+}
+
+/** 关注度判定：把"价格在结构的什么位置"翻译成"此刻是否值得看单" */
+export interface AttentionVerdict {
+  level: 'focus' | 'watch' | 'wait' | 'none' | 'chase'
+  headline: string
+  facts: string[]
+  why: string
+  how: string
+  dont: string | null
 }
 
 export interface MacdSeries {
