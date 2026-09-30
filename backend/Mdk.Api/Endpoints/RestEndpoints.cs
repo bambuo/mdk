@@ -111,7 +111,7 @@ internal static class RestEndpoints
             .WithSummary("缠论结构 + 买卖点信号 + 指标序列（纯缠论）");
 
         app.MapPost("/api/backfill/run", async (
-                string? market, int? days, string? symbols, string? intervals, bool? subLevel,
+                string? market, int? days, string? symbols, string? intervals, bool? subLevel, string? until,
                 SignalBackfillService backfill, CancellationToken ct) =>
             {
                 if (!MarketKindExtensions.TryParse(market, out var marketKind) || marketKind != MarketKind.Spot)
@@ -124,13 +124,23 @@ internal static class RestEndpoints
                 var badInterval = intervalList.FirstOrDefault(i => !MarketIntervals.IsValid(i));
                 if (badInterval is not null) return BadRequest($"不支持的周期 “{badInterval}”");
 
+                // 可选：重放窗口的结束时刻（"2026-06-30" 或 unix 秒）。用于重放与已分析样本不重叠的历史窗口——
+                // 已挖过的样本不能再用来自证（样本预算口径，见 PLAN §0.21）。
+                long? untilUnix = null;
+                if (!string.IsNullOrWhiteSpace(until))
+                {
+                    if (long.TryParse(until, out var epoch)) untilUnix = epoch;
+                    else if (DateTimeOffset.TryParse(until, out var parsed)) untilUnix = parsed.ToUnixTimeSeconds();
+                    else return BadRequest($"until 参数无效 “{until}”（支持 yyyy-MM-dd 或 unix 秒）");
+                }
+
                 var status = backfill.Status;
                 if (status.Running) return Results.Ok(status);   // 已有回填在跑，直接返回进度
                 _ = backfill.RunAsync(Math.Clamp(days ?? 90, 7, 365), symbolList, intervalList, CancellationToken.None,
-                    subLevel ?? true);
+                    subLevel ?? true, untilUnix);
                 return Results.Ok(backfill.Status);
             })
-            .WithSummary("历史回填：拉取历史K线逐根复算缠论信号并入库（异步执行，用 status 查询进度）");
+            .WithSummary("历史回填：拉取历史K线逐根复算缠论信号并入库（异步执行；until 可指定重放窗口结束时刻，用于不重叠样本）");
 
         app.MapGet("/api/backfill/status", (SignalBackfillService backfill) => Results.Ok(backfill.Status))
             .WithSummary("历史回填进度");

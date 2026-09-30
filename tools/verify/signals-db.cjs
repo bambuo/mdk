@@ -32,7 +32,7 @@ function load(dbPath) {
   const db = new Database(dbPath ?? DEFAULT_DB, { readonly: true })
   try {
     return db.query(`
-      SELECT market, base_asset, quote_asset, interval, source, side, signal_time AS time,
+      SELECT market, base_asset, quote_asset, interval, source, kind, side, signal_time AS time,
              is_confirmed, price, stop_price, reference_price, note, trend_aligned, confluence, adx,
              atr_pct, bandwidth_pct, joint_score, origin, recorded_at,
              outcome_status, outcome_ret, outcome_excess, outcome_mfe, outcome_mae,
@@ -47,6 +47,7 @@ function load(dbPath) {
       display: `${row.base_asset}/${row.quote_asset}`,
       interval: row.interval,
       source: row.source,
+      kind: row.kind,
       side: row.side,
       time: row.time,
       isConfirmed: row.is_confirmed === 1,

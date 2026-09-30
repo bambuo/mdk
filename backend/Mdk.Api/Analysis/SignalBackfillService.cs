@@ -84,7 +84,12 @@ public sealed class SignalBackfillService(
     }
 
     /// <summary>执行一次回填（同一时刻只允许一个）。</summary>
-    public async Task<BackfillStatus> RunAsync(int days, IReadOnlyList<string> symbols, IReadOnlyList<string> intervals, CancellationToken ct, bool subLevelConfirm = true)
+    /// <param name="untilUnix">
+    /// 重放窗口的**结束时刻**（unix 秒）；null = 现在。用于重放一段**与已分析样本不重叠**的历史窗口——
+    /// 已挖过的样本不能再用来自证（见 PLAN §0.21 样本预算口径）。
+    /// </param>
+    public async Task<BackfillStatus> RunAsync(int days, IReadOnlyList<string> symbols, IReadOnlyList<string> intervals,
+        CancellationToken ct, bool subLevelConfirm = true, long? untilUnix = null)
     {
         if (!await _gate.WaitAsync(0, ct))
             return _status;   // 已有回填在跑
@@ -96,8 +101,9 @@ public sealed class SignalBackfillService(
         _status = new BackfillStatus(true, null, 0, total, 0, startedAt, 0, null);
         try
         {
-            logger.LogInformation("历史回填开始：{Days} 天 × {Symbols} 标的 × {Intervals} 周期",
-                days, symbols.Count, intervals.Count);
+            logger.LogInformation("历史回填开始：{Days} 天 × {Symbols} 标的 × {Intervals} 周期（结束于 {Until}）",
+                days, symbols.Count, intervals.Count,
+                untilUnix is { } u ? DateTimeOffset.FromUnixTimeSeconds(u).ToString("yyyy-MM-dd") : "现在");
 
             foreach (var interval in intervals)
             {
@@ -124,7 +130,7 @@ public sealed class SignalBackfillService(
                     _status = _status with { Current = $"{pair.Value.Symbol} {interval}", Completed = completed };
                     try
                     {
-                        recorded += await SeedOneAsync(pair.Value, interval, subInterval, htfInterval, days, ct, subLevelConfirm);
+                        recorded += await SeedOneAsync(pair.Value, interval, subInterval, htfInterval, days, ct, subLevelConfirm, untilUnix);
                     }
                     catch (OperationCanceledException)
                     {
@@ -159,14 +165,15 @@ public sealed class SignalBackfillService(
 
     private async Task<long> SeedOneAsync(
         TradingPair pair, string interval, string? subInterval, string? htfInterval, int days, CancellationToken ct,
-        bool subLevelConfirm = true)
+        bool subLevelConfirm = true,
+        long? untilUnix = null)
     {
         var barSeconds = MarketIntervals.IntervalSeconds(interval);
         var windowBars = Math.Max(120, _chanOptions.AnalysisBars);
         var now = DateTimeOffset.UtcNow.ToUnixTimeSeconds();
-        var toSec = now;
-        // 需要 windowBars 根预热历史，才能从 (now - days) 起逐根复算
-        var fromSec = now - days * 86400L - (long)(windowBars * barSeconds * 1.05);
+        var toSec = untilUnix ?? now;
+        // 需要 windowBars 根预热历史，才能从窗口起点逐根复算
+        var fromSec = toSec - days * 86400L - (long)(windowBars * barSeconds * 1.05);
 
         var main = await rest.GetKlinesRangeAsync(MarketKind.Spot, pair, interval, fromSec, toSec, ct);
         if (main.Length < windowBars + 10)
@@ -191,7 +198,7 @@ public sealed class SignalBackfillService(
             htf = await rest.GetKlinesRangeAsync(MarketKind.Spot, pair, htfInterval, fromSec - htfWarmup, toSec, ct);
         }
 
-        var seedFrom = now - days * 86400L;
+        var seedFrom = toSec - days * 86400L;
         // A/B 对照：可关闭次级别确认（origin 参与台账去重，两组样本互不覆盖）
         var options = subLevelConfirm ? _chanOptions : _chanOptions.Clone(requireSubLevelConfirm: false);
         var origin = subLevelConfirm ? "backfill" : "backfill-nosub";
