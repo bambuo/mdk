@@ -389,13 +389,10 @@ function sideColor(side: string) {
             <div class="signal-head">
               <span class="side" :class="sig.side">{{ sig.side === 'buy' ? '买' : '卖' }}</span>
               <span class="src-name">{{ sig.kind ? `${sig.source} ${sig.kind}` : sig.source }}</span>
-              <span v-if="!sig.isConfirmed" class="preview-badge">盘中</span>
-              <span v-if="confluenceLabel(sig.confluence)" class="conf-badge" :class="sig.confluence">
-                {{ confluenceLabel(sig.confluence) }}
-              </span>
               <span class="signal-time" :title="formatTimeFull(sig.time)">{{ formatTime(sig.time) }}</span>
               <span class="signal-price" :class="sig.side">{{ formatPrice(sig.price) }}</span>
-              <span class="head-spacer" />
+            </div>
+            <div class="signal-sub">
               <a-tooltip position="left">
                 <span class="cred-badge" :class="credibilityClass(sig)">{{ credibilityText(sig) }}</span>
                 <template #content>
@@ -419,16 +416,20 @@ function sideColor(side: string) {
                   </div>
                 </template>
               </a-tooltip>
+              <span class="flex-spacer" />
+              <span v-if="lagText(sig)" class="lag" :class="lagClass(sig.lagShare!)" title="入场相对结构参考点已完成的幅度 ÷ 该信号的止损距离（1R）">
+                {{ lagText(sig) }}
+              </span>
             </div>
             <div class="signal-meta">
-              <span :class="sig.isConfirmed ? 'ok' : 'warn'">{{ sig.isConfirmed ? '已确认' : '未确认' }}</span>
+              <span :class="sig.isConfirmed ? 'ok' : 'warn'">{{ sig.isConfirmed ? '已确认' : '盘中预警' }}</span>
+              <span v-if="confluenceLabel(sig.confluence)" class="conf-badge" :class="sig.confluence">
+                {{ confluenceLabel(sig.confluence) }}
+              </span>
               <span v-if="sig.trendAligned != null">{{ sig.trendAligned ? '顺大势' : '逆大势' }}</span>
               <span v-if="sig.adx != null" :class="regimeClass(sig.adx)">ADX{{ sig.adx.toFixed(0) }}</span>
               <span v-if="sig.stopPrice != null">
                 止损 {{ formatPrice(sig.stopPrice) }}<template v-if="sig.riskPct != null">（{{ (sig.riskPct * 100).toFixed(2) }}%）</template>
-              </span>
-              <span v-if="lagText(sig)" :class="lagClass(sig.lagShare!)" title="入场相对结构参考点已完成的幅度 ÷ 该信号的止损距离（1R）">
-                {{ lagText(sig) }}
               </span>
             </div>
           </div>
@@ -856,7 +857,8 @@ function sideColor(side: string) {
 .sigs-controls {
   display: flex;
   align-items: center;
-  gap: 8px;
+  flex-wrap: wrap;
+  gap: 6px 8px;
   margin-bottom: 10px;
 }
 
@@ -893,8 +895,8 @@ function sideColor(side: string) {
 }
 
 .src-select {
-  flex: 1 1 auto;
-  min-width: 0;
+  flex: 1 1 120px;
+  min-width: 112px;
 }
 
 .signal-head .side {
@@ -931,18 +933,15 @@ function sideColor(side: string) {
 }
 
 .signal-meta {
-  display: flex;
-  gap: 0;
   font-size: 11px;
-  margin-top: 2px;
+  margin-top: 4px;
   color: #6b7280;
+  column-gap: 7px;
+  row-gap: 2px;
+  flex-wrap: wrap;
 }
 
-.signal-meta > span + span::before {
-  content: '·';
-  margin: 0 5px;
-  color: #3a4048;
-}
+
 
 .signal-meta .ok {
   color: #26a69a;
@@ -1135,10 +1134,6 @@ function sideColor(side: string) {
   border-style: dashed;
 }
 
-.head-spacer {
-  flex: 1 1 auto;
-}
-
 .cred-tip {
   font-size: 12px;
   line-height: 18px;
@@ -1154,9 +1149,21 @@ function sideColor(side: string) {
   color: var(--color-text-3);
 }
 
-.signal-meta .lag.good,
-.signal-meta .lag.mid,
-.signal-meta .lag.weak {
+.signal-sub .lag.good {
+  color: #26a69a;
+}
+
+.signal-sub .lag.mid {
+  color: #f0b90b;
+}
+
+.signal-sub .lag.weak {
+  color: #ef5350;
+}
+
+.signal-sub .lag.good,
+.signal-sub .lag.mid,
+.signal-sub .lag.weak {
   font-weight: 600;
 }
 
@@ -1169,15 +1176,40 @@ function sideColor(side: string) {
   filter: brightness(1.2);
 }
 
-.signal-head {
+.signal-head,
+.signal-sub,
+.signal-meta {
   display: flex;
   align-items: center;
+}
+
+/* 关键纪律：项与项之间可以换行，项内部绝不允许折行（此前"缠论 3卖"被压成竖排就是这个原因） */
+.signal-head > *,
+.signal-sub > *,
+.signal-meta > * {
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
+.flex-spacer {
+  flex: 1 1 8px;
+}
+
+.signal-head {
   gap: 6px;
+  min-width: 0;
+  flex-wrap: wrap;
+  row-gap: 2px;
+}
+
+.signal-sub {
+  gap: 6px;
+  margin-top: 4px;
 }
 
 .signal-time {
   color: #6b7280;
-  font-size: 11px;
+  font-size: 10px;
 }
 
 .signal-price {
@@ -1194,17 +1226,7 @@ function sideColor(side: string) {
   color: #ef5350;
 }
 
-.signal-note {
-  font-size: 12px;
-  color: #9aa3b0;
-  margin-top: 2px;
-}
 
-.signal-stop {
-  font-size: 11px;
-  color: #6b7280;
-  margin-top: 2px;
-}
 
 .panel-empty {
   margin-top: 40px;
