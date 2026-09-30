@@ -134,6 +134,18 @@ function regimeClass(adx: number) {
   return ''
 }
 
+/**
+ * 趋势占比按方向呈现：score 是"多方证据占比"（0–100）。
+ * 做空时展示"空方占比"= 100 − score——否则"做空 · 多方占比 0"会被误读为"做空强度为 0"。
+ */
+const trendShare = computed(() => {
+  const direction = props.analysis?.trend.direction
+  const score = props.analysis?.trend.score ?? 50
+  return direction === 'SHORT'
+    ? { num: 100 - score, label: '/ 100 空方占比' }
+    : { num: score, label: '/ 100 多方占比' }
+})
+
 function gradeColor(grade: string) {
   if (grade === '可实盘') return '#f0b90b'   // 唯一允许对上实盘语义的档位
   if (grade === '可参考') return '#26a69a'
@@ -400,12 +412,12 @@ function sideColor(side: string) {
       <div class="trend-head">
         <a-tag :color="trendMeta.color" size="large" class="trend-tag">{{ trendMeta.text }}</a-tag>
         <div class="trend-score">
-          <span class="score-num">{{ analysis.trend.score }}</span>
-          <span class="score-label">/ 100 多方占比</span>
+          <span class="score-num">{{ trendShare.num }}</span>
+          <span class="score-label">{{ trendShare.label }}</span>
         </div>
       </div>
       <a-progress
-        :percent="analysis.trend.score"
+        :percent="trendShare.num / 100"
         :show-text="false"
         :color="trendMeta.color === 'gray' ? '#6b7280' : trendMeta.color === 'green' ? '#26a69a' : '#ef5350'"
         size="small"
