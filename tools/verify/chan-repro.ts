@@ -25,11 +25,16 @@ for (const [symbol, interval] of [['BTCUSDT', '1h'], ['ETHUSDT', '15m'], ['SOLUS
     onlyIn(fa, fb, 300, 500); onlyIn(fb, fa, 500, 300)
     onlyIn(fb, fc, 500, 1000); onlyIn(fc, fb, 1000, 500)
   }
-  // 中枢一致性：chanZg 在重叠区的取值
-  const zgOf = (x, n) => { const z = x.series.chanZg; const off = z.length - n; return z.slice(off).map(v => v == null ? -1 : Math.round(v * 100)) }
-  const zA = zgOf(a, 300), zB = zgOf(b, 300), zC = zgOf(c, 300)
-  const zgSame = JSON.stringify(zA) === JSON.stringify(zB) && JSON.stringify(zB) === JSON.stringify(zC)
+  // 中枢一致性：重叠区内的中枢指纹（起止时间 + 上下沿 + 笔数）在三者间必须完全一致
+  // （chanZg/chanZd 序列已于 2026-09-30 下线，改按 chan.pivots 权威列表比对，信息更完整）
+  const from = overlapStart
+  const pivotFp = (x) => (x.chan?.pivots ?? [])
+    .filter(p => p.toTime >= from)
+    .map(p => `${p.fromTime}-${p.toTime}-${p.zg}-${p.zd}-${p.strokes}`)
+    .join('|')
+  const zA = pivotFp(a), zB = pivotFp(b), zC = pivotFp(c)
+  const zgSame = zA === zB && zB === zC
   if (!zgSame) bad++
-  console.log(`  ${zgSame ? '✓' : '✗'} 最近 300 根的中枢带取值在三者间一致`)
+  console.log(`  ${zgSame ? '✓' : '✗'} 最近 300 根的中枢（起止+上下沿）在三者间一致`)
 }
 console.log(bad === 0 ? '\n复现性验证通过：内部窗口钉死后，不同显示窗口结果一致' : `\n${bad} 项不一致`)

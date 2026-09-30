@@ -26,6 +26,12 @@ public static class ChanLevelMapper
         long toTime,
         int maxPivots)
     {
+        // 唯一实现：判定口径 = **与窗口有交集即保留**（不是"起终点都必须落在窗口内"）。
+        // 修因（2026-09-30 审查）：缠论在更长的内部窗口上计算后整体左移到显示窗口，
+        // 跨越窗口左边界的中枢其 startBar 为负，此前被 `startBar < 0` 整条丢弃——
+        // 表现为图上少一段中枢带，且 300/500/1000 三种显示窗口给出的中枢不一致
+        // （由 chan-repro.ts 的独立复算发现）。越界索引的时间按等间隔外推（K线连续）。
+        var barSeconds = BarSeconds(candles);
         var infos = new List<ChanPivotInfo>();
         foreach (var pivot in result.Pivots)
         {
@@ -34,11 +40,11 @@ public static class ChanLevelMapper
 
             var startBar = result.Strokes[pivot.StartStrokeIndex].StartBarIndex;
             var endBar = result.Strokes[pivot.EndStrokeIndex].EndBarIndex;
-            if (startBar < 0 || endBar < 0 || startBar >= candles.Count || endBar >= candles.Count) continue;
+            if (endBar < 0 || startBar >= candles.Count) continue;   // 与显示窗口完全无交集
 
-            var pFrom = candles[startBar].Time;
-            var pTo = candles[endBar].Time;
-            if (pTo < fromTime || pFrom > toTime) continue;   // 与显示窗口无交集
+            var pFrom = TimeAt(candles, startBar, barSeconds);
+            var pTo = TimeAt(candles, endBar, barSeconds);
+            if (pTo < fromTime || pFrom > toTime) continue;
 
             infos.Add(new ChanPivotInfo(
                 FromTime: pFrom,
@@ -50,6 +56,27 @@ public static class ChanLevelMapper
         }
         return infos.Count <= maxPivots ? infos : infos.Skip(infos.Count - maxPivots).ToList();
     }
+
+    /// <summary>由相邻K线间隔推断周期秒数（中位数，取前 64 个差值）；不足两根时为 0。</summary>
+    private static long BarSeconds(IReadOnlyList<Candle> candles)
+    {
+        if (candles.Count < 2) return 0;
+        var deltas = new List<long>();
+        for (var i = 1; i < candles.Count && deltas.Count < 64; i++)
+        {
+            var d = candles[i].Time - candles[i - 1].Time;
+            if (d > 0) deltas.Add(d);
+        }
+        if (deltas.Count == 0) return 0;
+        deltas.Sort();
+        return deltas[deltas.Count / 2];
+    }
+
+    /// <summary>窗口内K线时间；索引越界（中枢起点在窗口左侧）时按等间隔外推。</summary>
+    private static long TimeAt(IReadOnlyList<Candle> candles, int barIndex, long barSeconds) =>
+        barIndex >= 0 && barIndex < candles.Count
+            ? candles[barIndex].Time
+            : candles[0].Time + barIndex * barSeconds;
 
     /// <summary>
     /// 计算级别归属（两个口径分别对应不同问题，故判据不同）：

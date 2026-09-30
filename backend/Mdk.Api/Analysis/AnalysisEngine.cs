@@ -338,28 +338,13 @@ public static class AnalysisEngine
         };
     }
 
-    /// <summary>中枢 → 区间信息（时间用显示窗口的K线时间换算，只保留与显示窗口有交集的中枢）。</summary>
-    private static IReadOnlyList<ChanPivotInfo> BuildPivotInfos(IReadOnlyList<Candle> candles, Chan.ChanResult result)
-    {
-        var infos = new List<ChanPivotInfo>();
-        foreach (var pivot in result.Pivots)
-        {
-            if (pivot.StartStrokeIndex < 0 || pivot.EndStrokeIndex >= result.Strokes.Count) continue;
-            var startBar = result.Strokes[pivot.StartStrokeIndex].StartBarIndex;
-            var endBar = result.Strokes[pivot.EndStrokeIndex].EndBarIndex;
-            if (startBar < 0 || endBar < 0 || startBar >= candles.Count || endBar >= candles.Count) continue;
-            infos.Add(new ChanPivotInfo(
-                FromTime: candles[startBar].Time,
-                ToTime: candles[endBar].Time,
-                Zg: pivot.Zg,
-                Zd: pivot.Zd,
-                Strokes: pivot.StrokeCount,
-                IsConfirmed: pivot.IsConfirmed));
-        }
-        // 只保留与显示窗口有交集的最近若干中枢
-        var windowStart = candles[0].Time;
-        return infos.Where(i => i.ToTime >= windowStart).TakeLast(8).ToList();
-    }
+    /// <summary>
+    /// 中枢 → 区间信息：委托 <see cref="Chan.ChanLevelMapper.ToPivotInfos"/>（唯一实现，
+    /// 口径为"与显示窗口有交集即保留"，越界索引时间按等间隔外推——见该方法的修因说明）。
+    /// </summary>
+    private static IReadOnlyList<ChanPivotInfo> BuildPivotInfos(
+        IReadOnlyList<Candle> candles, Chan.ChanResult result) =>
+        Chan.ChanLevelMapper.ToPivotInfos(candles, result, candles[0].Time, candles[^1].Time, 8);
 
     /// <summary>按时间戳定位原始K线索引（找不到时回退到最后一根）。</summary>
     private static int BarIndexOf(IReadOnlyList<Candle> candles, long time)
