@@ -61,14 +61,6 @@ function confluenceLabel(tag: string | null): string {
   return ''
 }
 
-/** 共振筛选：all=全部，aligned=只看顺大势，counter=只看逆大势（当前证据无显著差异，仅作状态标注） */
-const alignment = ref<'all' | 'aligned' | 'counter'>('all')
-const alignmentOptions = [
-  { value: 'all' as const, label: '全部' },
-  { value: 'aligned' as const, label: '顺大势' },
-  { value: 'counter' as const, label: '逆大势' },
-]
-
 /** 统计面板默认收起：主视图只留信号本身 */
 const statsOpen = ref(false)
 
@@ -76,8 +68,6 @@ const recentSignals = computed(() => {
   const a = props.analysis
   if (!a) return []
   let list = [...a.signals]
-  if (alignment.value === 'aligned') list = list.filter(s => s.trendAligned === true)
-  if (alignment.value === 'counter') list = list.filter(s => s.trendAligned === false)
   if (confluenceOnly.value) list = list.filter(s => s.confluence === 'aligned')
   return list.reverse().slice(0, 20)
 })
@@ -325,15 +315,6 @@ function sideColor(side: string) {
       <!-- 筛选：单行，弱化视觉权重 -->
       <div class="sigs-controls">
         <div class="seg">
-          <button
-            v-for="opt in alignmentOptions"
-            :key="opt.value"
-            type="button"
-            :class="{ on: alignment === opt.value }"
-            @click="alignment = opt.value"
-          >{{ opt.label }}</button>
-        </div>
-        <div class="seg">
           <button type="button" :class="{ on: !confluenceOnly }" @click="confluenceOnly = false">全部</button>
           <button type="button" :class="{ on: confluenceOnly }" @click="confluenceOnly = true"
                   title="只显示前 1 根高周期K线内出现同向高周期缠论信号的信号（级别共振）">只看共振</button>
@@ -398,11 +379,10 @@ function sideColor(side: string) {
               </span>
             </div>
             <div class="signal-meta">
-              <span :class="sig.isConfirmed ? 'ok' : 'warn'">{{ sig.isConfirmed ? '已确认' : '盘中预警' }}</span>
+              <span v-if="!sig.isConfirmed" class="warn">盘中预警（未确认）</span>
               <span v-if="confluenceLabel(sig.confluence)" class="conf-badge" :class="sig.confluence">
                 {{ confluenceLabel(sig.confluence) }}
               </span>
-              <span v-if="sig.trendAligned != null">{{ sig.trendAligned ? '顺大势' : '逆大势' }}</span>
               <span v-if="sig.adx != null" :class="regimeClass(sig.adx)">ADX{{ sig.adx.toFixed(0) }}</span>
               <span v-if="sig.stopPrice != null">
                 止损 {{ formatPrice(sig.stopPrice) }}<template v-if="sig.riskPct != null">（{{ (sig.riskPct * 100).toFixed(2) }}%）</template>
@@ -411,7 +391,7 @@ function sideColor(side: string) {
           </div>
         </a-timeline-item>
       </a-timeline>
-      <a-empty v-else :description="alignment === 'all' ? '当前窗口内暂无信号' : '当前筛选下没有信号'" />
+      <a-empty v-else description="当前窗口内暂无信号" />
       <p v-if="previewCount" class="preview-tip">另有 {{ previewCount }} 条盘中预警在最新K线上（未确认）</p>
     </section>
     <!-- 概念一：趋势方向 -->
@@ -870,10 +850,6 @@ function sideColor(side: string) {
   color: #e5e7eb;
 }
 
-.src-select {
-  flex: 1 1 120px;
-  min-width: 112px;
-}
 
 .signal-head .side {
   font-size: 11px;
