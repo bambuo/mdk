@@ -34,7 +34,7 @@ function load(dbPath) {
     return db.query(`
       SELECT market, base_asset, quote_asset, interval, source, side, signal_time AS time,
              is_confirmed, price, stop_price, reference_price, note, trend_aligned, confluence, adx,
-             atr_pct, bandwidth_pct, origin, recorded_at,
+             atr_pct, bandwidth_pct, joint_score, origin, recorded_at,
              outcome_status, outcome_ret, outcome_excess, outcome_mfe, outcome_mae,
              outcome_stop_hit, outcome_net_positive, outcome_evaluated_at
       FROM signals
@@ -62,6 +62,8 @@ function load(dbPath) {
       adx: num(row.adx),
       atrPct: num(row.atr_pct),
       bandwidthPct: num(row.bandwidth_pct),
+      /** 联合打分（结构共振 + 技术指标，等权 0–6）；旧行/未回填为 null */
+      jointScore: row.joint_score === null || row.joint_score === undefined ? null : Number(row.joint_score),
       origin: row.origin,
       recordedAt: row.recorded_at,
       get lagShare() {

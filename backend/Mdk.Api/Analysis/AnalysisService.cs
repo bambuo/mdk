@@ -8,7 +8,6 @@ namespace Mdk.Api.Analysis;
 /// <summary>组合「拉K线 + 纯函数分析」，供 REST 与 WS 共用；同时把新信号落库供事后绩效评估。</summary>
 public sealed class AnalysisService(
     BinanceRestClient rest,
-    IOptions<SignalOptions> signalOptions,
     IOptions<Chan.ChanOptions> chanOptions,
     SignalStore store)
 {
@@ -19,31 +18,17 @@ public sealed class AnalysisService(
     private readonly ConcurrentDictionary<string, (IReadOnlyList<CredibilityBucket> Buckets, DateTimeOffset At)>
         _credibilityCache = new();
 
-    private readonly SignalOptions _signalOptions = signalOptions.Value;
     private readonly Chan.ChanOptions _chanOptions = chanOptions.Value;
     private readonly ConcurrentDictionary<string, (IReadOnlyList<Models.Candle> Candles, DateTimeOffset At)> _htfCache = new();
 
-    /// <summary>最近被请求过的组合（键 → (组合, 最近请求时间)），供关注列表定时分析使用。</summary>
-    private readonly ConcurrentDictionary<string, (MarketKind Market, TradingPair Pair, string Interval, DateTimeOffset At)> _recent = new();
-
-    /// <summary>返回最近关注的最多 max 个组合（按最近请求时间倒序）。</summary>
-    public IReadOnlyList<(MarketKind Market, TradingPair Pair, string Interval)> RecentRequests(int max) =>
-        _recent.Values
-            .OrderByDescending(v => v.At)
-            .Take(max)
-            .Select(v => (v.Market, v.Pair, v.Interval))
-            .ToList();
-
     public async Task<AnalysisResult> AnalyzeAsync(
-        MarketKind market, TradingPair pair, string interval, int limit, CancellationToken ct = default,
-        bool? useSegments = null)
+        MarketKind market, TradingPair pair, string interval, int limit, CancellationToken ct = default)
     {
-        _recent[$"{market}|{pair.Symbol}|{interval}"] = (market, pair, interval, DateTimeOffset.UtcNow);
-        var chanOptions = useSegments is null ? _chanOptions : _chanOptions.Clone(useSegments: useSegments);
+        var chanOptions = _chanOptions;
 
         // 缠论使用固定内部窗口（最近 AnalysisBars 根），与显示窗口解耦——保证结构与信号可复现；
         // 因此取数上限需覆盖两者中较大者。
-        var chanBars = chanOptions.Enabled ? chanOptions.EffectiveAnalysisBars : 0;
+        var chanBars = chanOptions.Enabled ? chanOptions.AnalysisBars : 0;
         var fetchBars = Math.Clamp(Math.Max(limit, chanBars), 250, 1500);
         var fetched = await rest.GetKlinesAsync(market, pair, interval, fetchBars, ct);
         if (fetched.Length == 0)
@@ -95,7 +80,7 @@ public sealed class AnalysisService(
             }
         }
 
-        var result = AnalysisEngine.Compute(market, pair, interval, candles, _signalOptions, htf, htfInterval,
+        var result = AnalysisEngine.Compute(market, pair, interval, candles, htf, htfInterval,
             chanOptions, chanWindow, subLevel, subLevelInterval, lowerLevel, lowerLevelInterval);
         RecordSignals(market, pair, interval, result);
         return result with { Credibility = GetCredibilityCached(market, interval) };
@@ -128,6 +113,7 @@ public sealed class AnalysisService(
                 Adx = sig.Adx,
                 AtrPct = sig.AtrPct,
                 BandwidthPct = sig.BandwidthPct,
+                JointScore = sig.JointScore?.Score,
                 RecordedAt = now,
             });
         }
@@ -150,6 +136,7 @@ public sealed class AnalysisService(
         var pool = store.Snapshot()
             .Where(e => e.Market == market
                         && e.Interval == interval
+                        && e.Source == "缠论"       // 精简为纯缠论：历史台账里的 EMA/RSI/MACD/结构 样本不再进入可信度
                         && !e.Pair.IsPegged
                         && e.Outcome is { Status: "ok" })
             // 同一信号可能先记「盘中预警」再记「收盘确认」：按信号本体去重，优先确认版本
@@ -158,8 +145,8 @@ public sealed class AnalysisService(
             .ToList();
 
         var buckets = pool
-            .GroupBy(e => (e.Source, e.Kind))
-            .Select(g => SignalCredibilityRules.Build(g.Key.Source, g.Key.Kind, interval, g.ToList()))
+            .GroupBy(e => e.Kind)
+            .Select(g => SignalCredibilityRules.Build(g.Key, interval, g.ToList()))
             .OrderByDescending(b => b.NEpisodes)
             .ToList();
 
@@ -207,7 +194,7 @@ public sealed class AnalysisService(
             return hit.Candles;
 
         // 与缠论内部窗口同口径（回填与在线需一致），至少 260 根
-        var bars = Math.Max(260, _chanOptions.EffectiveAnalysisBars);
+        var bars = Math.Max(260, _chanOptions.AnalysisBars);
         var candles = await rest.GetKlinesAsync(market, pair, htfInterval, Math.Min(1000, bars), ct);
         _htfCache[key] = (candles, DateTimeOffset.UtcNow);
         return candles;

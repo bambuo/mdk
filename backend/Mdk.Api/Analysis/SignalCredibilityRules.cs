@@ -8,8 +8,7 @@ namespace Mdk.Api.Analysis;
 /// 而不是启发式分数。样本不足时 <see cref="Sufficient"/> 为 false，界面必须显示"样本不足"而非给出胜率。
 /// </summary>
 public sealed record CredibilityBucket(
-    string Source,
-    /// <summary>买卖点类别（如 "3买"）；非缠论信号为 null。</summary>
+    /// <summary>买卖点类别（如 "3买"）。精简为纯缠论后不再需要来源维度。</summary>
     string? Kind,
     string Interval,
     /// <summary>原始样本数。</summary>
@@ -44,7 +43,7 @@ public static class SignalCredibilityRules
     private const decimal Z = 1.96m;
 
     public static CredibilityBucket Build(
-        string source, string? kind, string interval, IReadOnlyList<SignalEntry> items)
+        string? kind, string interval, IReadOnlyList<SignalEntry> items)
     {
         var episodes = SignalQualityRules.EpisodeRepresentatives(items);
         var n = episodes.Count;
@@ -62,7 +61,6 @@ public static class SignalCredibilityRules
             .ToList();
 
         return new CredibilityBucket(
-            Source: source,
             Kind: kind,
             Interval: interval,
             N: items.Count,
@@ -74,6 +72,27 @@ public static class SignalCredibilityRules
             NetPositiveRate: n == 0 ? 0m : netPositive / (decimal)n,
             MedianExcess: Median(excess),
             MedianRiskPct: Median(risks));
+    }
+
+    /// <summary>
+    /// 从台账快照构建某语境（市场 × 类别 × 周期，缠论）的可信度：
+    /// 只统计已评估样本，排除锚定币；同一信号先以「盘中预警」再以「收盘确认」各记一条时，
+    /// 按信号本体去重并优先确认版本。与 AnalysisService 的可信度表同一口径，供监控页等复用。
+    /// </summary>
+    public static CredibilityBucket BuildFromStore(
+        string? kind, string interval, MarketKind market, IReadOnlyList<SignalEntry> snapshot)
+    {
+        var items = snapshot
+            .Where(e => e.Market == market
+                        && e.Interval == interval
+                        && e.Source == "缠论"
+                        && e.Kind == kind
+                        && !e.Pair.IsPegged
+                        && e.Outcome is { Status: "ok" })
+            .GroupBy(e => (e.Pair, e.Interval, e.Source, e.Kind, e.Side, e.Time))
+            .Select(g => g.FirstOrDefault(e => e.IsConfirmed) ?? g.First())
+            .ToList();
+        return Build(kind, interval, items);
     }
 
     /// <summary>

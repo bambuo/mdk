@@ -32,7 +32,9 @@ public sealed record TradeSignal(
     /// <summary>结构参考价：买卖点所依据的极值/中枢沿（仅缠论信号有值，用于衡量"入场是否已经追高"）。</summary>
     decimal? ReferencePrice = null,
     /// <summary>买卖点类别（"1买"/"2买"/"3买"/"1卖"/"2卖"/"3卖"）；非缠论信号为 null。</summary>
-    string? Kind = null)
+    string? Kind = null,
+    /// <summary>联合打分 v2（按类别定义的等权 5 特征，见 JointScoreRules）；非缠论信号为 null。</summary>
+    JointScoreDetail? JointScore = null)
 {
     /// <summary>风险单位：入场到结构失效位（止损）的距离，占入场价比例。信号间可比的"1R"。</summary>
     public decimal? RiskPct => StopPrice is { } stop && Price != 0 ? Math.Abs(Price - stop) / Price : null;
@@ -47,6 +49,8 @@ public sealed record TradeSignal(
     /// </summary>
     public decimal? LagShare => RiskPct is { } risk && risk > 0 && EntryLagPct is { } lag ? lag / risk : null;
 }
+
+// 联合打分明细（JointScoreDetail / JointScoreFeature）定义见 JointScoreRules.cs（v2，按类别定义特征）。
 
 /// <summary>信号发生时的市场状态快照。</summary>
 public readonly record struct SignalRegime(decimal? Adx, decimal? AtrPct, decimal? BandwidthPct);
@@ -108,11 +112,7 @@ public sealed record ChanSummary(
     string? LastNote,
     IReadOnlyList<ChanPivotInfo> Pivots,
     /// <summary>高周期结构上下文（无高周期数据时为 null）。</summary>
-    ChanContextSummary? HigherContext = null,
-    /// <summary>结构模式：stroke=笔中枢（默认）/ segment=线段中枢。</summary>
-    string LevelMode = "stroke",
-    /// <summary>线段数量（stroke 模式下为 0）。</summary>
-    int SegmentCount = 0);
+    ChanContextSummary? HigherContext = null);
 
 /// <summary>一次完整的分析结果（REST /api/analysis 与 WS analysis 推送共用此结构）。</summary>
 public sealed record AnalysisResult(

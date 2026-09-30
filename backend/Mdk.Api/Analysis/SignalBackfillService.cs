@@ -162,7 +162,7 @@ public sealed class SignalBackfillService(
         bool subLevelConfirm = true)
     {
         var barSeconds = MarketIntervals.IntervalSeconds(interval);
-        var windowBars = Math.Max(120, _chanOptions.EffectiveAnalysisBars);
+        var windowBars = Math.Max(120, _chanOptions.AnalysisBars);
         var now = DateTimeOffset.UtcNow.ToUnixTimeSeconds();
         var toSec = now;
         // 需要 windowBars 根预热历史，才能从 (now - days) 起逐根复算
@@ -198,6 +198,7 @@ public sealed class SignalBackfillService(
         var signals = ChanBackfill.Replay(main, sub, subInterval, htf, htfInterval, options, seedFrom, toSec);
 
         var inserted = 0L;
+        var scored = 0L;
         var recordedAt = DateTimeOffset.UtcNow.ToUnixTimeSeconds();
         foreach (var s in signals)
         {
@@ -220,16 +221,23 @@ public sealed class SignalBackfillService(
                 Adx = s.Adx,
                 AtrPct = s.AtrPct,
                 BandwidthPct = s.BandwidthPct,
+                JointScore = s.JointScore,
                 RecordedAt = recordedAt,
                 Origin = origin,
             }))
             {
                 inserted++;
             }
+            else if (s.JointScore is { } js)
+            {
+                // 已存在的历史行：补齐联合打分（不产生重复行、不覆盖绩效）
+                store.FillJointScore(MarketKind.Spot, pair, interval, "缠论", s.Side, s.Time, true, origin, js);
+                scored++;
+            }
         }
 
-        logger.LogInformation("回填 {Symbol} {Interval}（次级别确认={Sub}）：窗口 {Bars} 根，产出信号 {Total} 个（新增 {Inserted} 条）",
-            pair.Symbol, interval, subLevelConfirm, main.Length, signals.Count, inserted);
+        logger.LogInformation("回填 {Symbol} {Interval}（次级别确认={Sub}）：窗口 {Bars} 根，产出信号 {Total} 个（新增 {Inserted} 条，补打分 {Scored} 条）",
+            pair.Symbol, interval, subLevelConfirm, main.Length, signals.Count, inserted, scored);
         return inserted;
     }
 }

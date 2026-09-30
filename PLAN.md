@@ -557,3 +557,104 @@ mdk/
 - 本机 .NET SDK 9/10 已装（无 SDK 8），后端目标框架定为 **net10.0（LTS）**；bun 1.4.0 已装。
 - lightweight-charts **v5 与 v4 API 差异大**（panes、markers 改为插件 `createSeriesMarkers`），锁定 ^5 按 v5 写法。
 - K线时间轴默认 UTC 显示，后续可加时区切换。
+
+## 0.17 精简为纯缠论（2026-09-30，用户要求"先精简系统，再完善功能"）
+
+**决策**：系统收敛为**纯缠论分析**——信号系统只保留缠论买卖点；EMA/RSI/MACD 与趋势/支撑阻力降为**图表指标**，不再产生信号、不进台账、不参与统计。本节取代 §2.2/§2.4 中关于 SignalEngine 与 `segments` 参数的旧描述。
+
+**事一（用户选定 A：从信号系统移除、仅留图表指标）**
+- 删除 `SignalEngine`（EMA 金叉/死叉、RSI 30/70、MACD 金叉/死叉、实验性"结构"信号源）及其单测；
+  `AnalysisEngine` 的 `allSignals` 只由缠论买卖点构成。指标计算（EMA/RSI/MACD/BOLL/ADX/ATR）保留，供图表与后续联合打分用。
+- 清理 `SignalOptions` 中已失效的 `UseFastEmaOn1h/FastEmaPeriod/FastEmaSlowPeriod/CooldownBars/IncludeStructureSignals`，
+  以及 `emaSigFast/emaSigSlow` 序列与图表图层。
+
+**事四（线段模式评估：实测结论"无用"，删除）**
+- 实测：8 标的 × 3 周期（15m/1h/4h）× 1200 根内部窗口，**笔模式产出 46 个信号 / 225 个中枢，线段模式仅 2 个信号**
+  （且该 2 条来自"不足 3 段回退笔模式"）。线段刻画趋势腿，可见窗口内几乎凑不出段级买卖点。
+- 删除 `ChanSegment`/`ChanSegmentBuilder`/线段测试、顶栏「线段」开关、`chanSegment` 图层、`segments` 请求参数
+  （REST/WS）、`Chan:UseSegments`/`Chan:SegmentAnalysisBars`；内部窗口统一为 `Chan:AnalysisBars=700`。
+
+**可信度与统计**
+- 台账统计限定 `source='缠论'`（历史库里 EMA/RSI/MACD/结构 样本不再进入统计）；
+  `CredibilityBucket` 去掉来源维度，按 **(类别 × 周期)** 分桶。
+- 校验：`run-all.sh` 去掉"线段正确性核对"（8 → 7 项），删除 `tools/verify/chan-segment-audit.mjs`。
+
+**验证**：`dotnet run --project backend/Mdk.Tests` **106/106 通过**；`bun run build`（vue-tsc + vite）通过；
+起后端（:5100，验证后已停）实测：`/api/analysis` 仅返回 `缠论` 信号、chan 无 `levelMode`/`segmentCount`、
+series 无 `chanSegment`/`emaSigFast`、`?segments=true` 被忽略，`/api/signal-stats` 仅 `缠论`（BTCUSDT 1h：157 条 · 仅观察）。
+
+**后续（已与用户确认）**
+- **事二 A**：见 §0.18（已实现）。
+- **事三**：把"可信度"实现为**联合打分**（缠论结构共振 + 技术指标）而非启发式置信度。规则**等权、预注册**，
+  必须以"前 60% 选择 / 后 40% 验证 + 波次口径（独立波次≥30、扣费后为正>50%、t≥2.5、单一标的≤50%）"检验；
+  **检验通过前不启用"可实盘"标签**，只作事实聚合展示。（已知：次级别确认 t=0.32、级别共振 t=0.53、13 个门控全未通过。）
+
+## 0.18 监控页与持久化监控列表（2026-09-30，事二 A）
+
+**需求**：用户指定并**持久化**监控交易对，后台定时分析，无浏览器连接也持续运行；页面汇总缠论信号与跨周期共振。
+
+**持久化（按用户指示：存数据库新表，不用 JSON 文件）**
+- 在应用自管的 `data/signals.db` 中新建表 `watchlist`（`CREATE TABLE IF NOT EXISTS`，与 `SignalStore` 同一套启动建表做法）：
+  `market` / `base_asset` / `quote_asset` / `intervals` / `enabled` / `created_at`，唯一键 `(market, base_asset, quote_asset)`；
+  周期存逗号分隔文本（白名单周期不含逗号）。标的沿用项目口径拆 `base_asset` / `quote_asset` 两列。
+- `WatchlistStore`（SQLite，独立连接 + WAL + `busy_timeout`）提供 All/Upsert/Remove/Toggle；周期做白名单归一与规范排序。
+
+**后台服务**
+- 删除旧的 `WatchlistAnalysisService`（"最近请求过的组合"推断）与其配置 `Signal:WatchlistMaxTriples`；
+  新增 `WatchlistMonitorService`（`BackgroundService`）：每 `Signal:WatchlistIntervalSeconds`（默认 120s）
+  逐 (市场, 交易对, 周期) 调 `AnalysisService.AnalyzeAsync`，最新 `AnalysisResult` 缓存在内存供监控页读取；
+  加入监控时立即预热一次（`Task.Run`，不阻塞响应）。`AnalysisService` 移除 `_recent` / `RecentRequests`。
+
+**接口**（`WatchlistEndpoints`）
+- `GET /api/watchlist`：条目 + 各周期快照（笔方向/确认、中枢上沿/下沿/笔数、现价是否在中枢内、最近买卖点与其距最新K线根数、信号数）+ 跨周期共振。
+- `POST /api/watchlist`（body `{market, symbol, intervals[]}`）、`POST /api/watchlist/toggle`、`DELETE /api/watchlist`、`GET /api/watchlist/signals?limit=`。
+- 校验复用 `PairResolver`：无效交易对 / 无效周期 / 锚定币均返回 400。
+
+**共振口径**：只看"新鲜"（最近买卖点距最新K线 ≤30 根）的周期；全同向=`aligned`，多空并存=`mixed`，仅一个或无=`none`，无快照=`pending`。
+
+**前端**：`App.vue` 顶部加「查看 / 监控」页签；新增 `MonitorView.vue`（添加表单 + 监控列表 + 信号流，15s 轮询）；点条目回查看页并切到该标的。
+
+**验证**：`dotnet run --project backend/Mdk.Tests` 106/106；`bun run build`（vue-tsc + vite）通过；
+起后端（:5100，验证后已停）实测：初始 `[]` → 加 BTCUSDT `[1h,4h,15m]`（返回周期已归一排序）→ 18s 后列表 3 个周期快照齐备、
+共振=`mixed` → `/api/watchlist/signals` 仅监控列表内缠论信号 → toggle `false` → delete → `[]`；无效周期与锚定币均 400；
+`bun:sqlite` 直读 `signals.db` 确认 `watchlist` 表与行（`spot|ETH|USDT|1h,4h|1|…`）落库。
+
+## 0.19 联合打分（结构共振 + 技术指标）与预注册检验（2026-09-30，事三）
+
+**定义（预注册：规则、分档、判据在跑数据前写定）**——`Analysis/JointScoreRules.cs`，等权 0–6：
+① 结构共振（高周期缠论买卖点同向，`confluence=aligned`）；② 均线同向（EMA20/50/200 多头/空头排列与信号方向一致）；
+③ 趋势强度（ADX(14) ≥ 25）；④ 动量一致（买：RSI≥50 且 MACD 柱≥0；卖：RSI≤50 且 MACD 柱≤0）；
+⑤ 强背驰（MACD 面积比 ≤ 0.7；仅 1/2 类有值，3 类不计分）；⑥ 入场不追高（滞后占比 `lagShare` ≤ 0.5）。分档：低 ≤2 / 中 3–4 / 高 ≥5。
+
+**实现**：特征在"缠论内部窗口"上计算（与结构同源，保证不同 limit 下打分一致），随信号落库（`signals.joint_score`，
+`EnsureColumn` 增量补列）；回填逐根复算同一口径；改进特征后重跑回填，用自然键 `SignalStore.FillJointScore` 给历史样本补分
+（不产生重复行、不覆盖绩效）。
+
+**判据**（`tools/verify/chan-score-study.cjs`，预注册）：按信号时间前 60% 选择 / 后 40% 验证，两段都要满足——
+高分组独立波次≥30、平均超额 t≥2.5（分层比较，多重比较加严）、中位超额>0、扣费后为正≥50%、单一标的占比≤50%，
+且高分组平均超额 > 低分组（单调性）。**未通过 → 联合打分只作事实聚合展示，不启用"可实盘"标签。**
+
+**结果（2026-09-30，5 标的 × 1h/4h × 90 天回填；已评估且带打分 1035 条）**：
+分数分布 0:141 / 1:397 / 2:406 / 3:86 / 4:2 / 5:3 / 6:0——**高分组（≥5）两段独立波次分别为 0 与 1**，远低于 ≥30 门槛；
+中分组（3–4）两段各 27 波、t=1.10 / 1.22，扣费后为正 44% / 37%；分组单调性不成立。
+**结论：预注册检验未通过。** 联合打分只作**事实聚合展示**（信号卡显示"打分 x/6"与逐项命中），
+**不启用任何"可信度 / 可实盘"语义**。
+
+**根因（供 v2 参考，不得据此回头调 v1）**：打分的技术指标特征（均线同向、动量一致）是**顺势**特征，
+而缠论 1/2 类买卖点多数是**逆势反转**结构，二者语义冲突 → 高分档几乎为空。若做 v2，须**重新预注册**
+（纳入逆势/背驰/回踩类特征）并重新走样本外检验。
+
+**v2（2026-09-30，重新预注册后一次性选择）**：按类别对齐特征语义——
+1/2 类（反转）：逆 EMA200、强背驰 ≤0.7、RSI 极端（买≤35/卖≥65）、入场成本低 ≤0.5R、止损效率 ≤2.5%；
+3 类（延续）：顺 EMA200、RSI 顺向（买≥50/卖≤50）、MACD 柱同向、入场成本低、止损效率。分档 低≤2 / 中3 / 高≥4。
+判据不变；样本**只用回填重算**（origin=backfill，1174 条已评估带打分），实时样本不掺入（打分口径切换期不一致）。
+
+结果：**仍未通过**。分数分布 0:53 / 1:205 / 2:448 / 3:388 / 4:77 / 5:3（分布比 v1 健康）；
+高分组选择段 t=1.55（28 波）、验证段 t=**-1.86**（24 波，超额 -0.29%），单调性不成立（高分未优于低分）。
+
+结论：即便特征与缠论语义对齐，回算样本上依旧没有可用的统计优势。**打分研究到此为止（不做 v3）**：
+在回算样本上继续换特征只会反复过拟合；下一个可信的证据只能来自实时样本（监控页 7×24 积累）。
+打分维持"事实聚合展示"；"可实盘"只由实盘晋升判据（SignalQualityRules.TradableGate，预注册阈值见代码注释）决定。
+
+
+

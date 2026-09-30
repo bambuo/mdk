@@ -35,7 +35,8 @@ public static class ChanBackfill
         decimal? Adx,
         decimal? AtrPct,
         decimal? BandwidthPct,
-        string? Confluence);
+        string? Confluence,
+        int? JointScore);
 
     /// <summary>
     /// 逐根复算。mainHistory 需覆盖 [fromTime - windowBars, toTime]；
@@ -83,10 +84,13 @@ public static class ChanBackfill
             Adx: p.Adx,
             AtrPct: p.AtrPct,
             BandwidthPct: p.BandwidthPct,
-            Confluence: tags.GetValueOrDefault((p.Point.Time, p.Point.Side)))).ToList();
+            Confluence: tags.GetValueOrDefault((p.Point.Time, p.Point.Side)),
+            JointScore: p.Detail.Score)).ToList();
     }
 
-    private sealed record LevelPoint(ChanBuySellPoint Point, decimal? Adx, decimal? AtrPct, decimal? BandwidthPct);
+    private sealed record LevelPoint(
+        ChanBuySellPoint Point, decimal? Adx, decimal? AtrPct, decimal? BandwidthPct,
+        JointScoreDetail Detail);
 
     /// <summary>单级别的逐根复算（不含高周期相关内容，供 L0 与 L1 复用）。</summary>
     private static List<LevelPoint> ReplayPoints(
@@ -100,7 +104,7 @@ public static class ChanBackfill
         var results = new List<LevelPoint>();
         if (history.Count == 0) return results;
 
-        var windowBars = Math.Max(120, options.EffectiveAnalysisBars);
+        var windowBars = Math.Max(120, options.AnalysisBars);
         const int subWindowBars = 300;
 
         for (var i = 0; i < history.Count; i++)
@@ -123,6 +127,11 @@ public static class ChanBackfill
             }
             var macdHist = Macd.Compute(closes).Hist;
             var atr = Atr.Compute(highs, lows, closes, 14);
+            // 联合打分特征：与在线同口径，在"缠论内部窗口"上计算
+            var ema20 = Ema.Compute(closes, 20);
+            var ema50 = Ema.Compute(closes, 50);
+            var ema200 = Ema.Compute(closes, 200);
+            var rsi = Rsi.Compute(closes, 14);
 
             Candle[]? subWindow = null;
             if (subHistory is { Count: > 0 } && !string.IsNullOrEmpty(subInterval))
@@ -146,7 +155,14 @@ public static class ChanBackfill
                 var bandwidth = (mid) is not null && mid > 0
                     ? (boll.Upper[last] - boll.Lower[last]) / mid
                     : (decimal?)null;
-                results.Add(new LevelPoint(point, adx, atrPct, bandwidth));
+                var detail = JointScoreRules.Compute(
+                    point.Price, ema200[last],
+                    rsi.Length > last ? rsi[last] : null,
+                    macdHist.Length > last ? macdHist[last] : null,
+                    point.Side, point.Kind, point.AreaRatio,
+                    JointScoreRules.RiskPct(point.Price, point.StopPrice),
+                    JointScoreRules.LagShare(point.Price, point.ReferencePrice, point.StopPrice));
+                results.Add(new LevelPoint(point, adx, atrPct, bandwidth, detail));
             }
         }
         return results;

@@ -52,6 +52,8 @@ public sealed class SignalEntry
     public decimal? Adx { get; set; }
     public decimal? AtrPct { get; set; }
     public decimal? BandwidthPct { get; set; }
+    /// <summary>联合打分（结构共振 + 技术指标，等权 0–6）；旧行/非缠论行为 null。</summary>
+    public int? JointScore { get; set; }
     public long RecordedAt { get; set; }
     /// <summary>来源：live=实时分析路径写入；backfill=历史回填（事后一次性生成，统计时需区分）。</summary>
     public string Origin { get; set; } = "live";
@@ -126,11 +128,11 @@ public sealed class SignalStore : IDisposable
                 INSERT OR IGNORE INTO signals
                     (market, base_asset, quote_asset, interval, source, kind, side, signal_time, is_confirmed,
                      price, stop_price, reference_price, note, trend_aligned, confluence, adx, atr_pct,
-                     bandwidth_pct, origin, recorded_at)
+                     bandwidth_pct, origin, recorded_at, joint_score)
                 VALUES
                     ($market, $base, $quote, $interval, $source, $kind, $side, $time, $confirmed,
                      $price, $stop, $reference, $note, $aligned, $confluence, $adx, $atrPct, $bandwidth,
-                     $origin, $recordedAt);
+                     $origin, $recordedAt, $jointScore);
                 """;
             cmd.Parameters.AddWithValue("$market", MarketKey(e.Market));
             cmd.Parameters.AddWithValue("$base", e.Pair.BaseAsset);
@@ -152,6 +154,7 @@ public sealed class SignalStore : IDisposable
             cmd.Parameters.AddWithValue("$bandwidth", ToText(e.BandwidthPct));
             cmd.Parameters.AddWithValue("$origin", e.Origin);
             cmd.Parameters.AddWithValue("$recordedAt", e.RecordedAt);
+            cmd.Parameters.AddWithValue("$jointScore", e.JointScore is null ? DBNull.Value : e.JointScore.Value);
             if (cmd.ExecuteNonQuery() == 0) return false;
 
             using var idCmd = _conn.CreateCommand();
@@ -183,6 +186,38 @@ public sealed class SignalStore : IDisposable
             cmd.Parameters.AddWithValue("$stopHit", outcome.StopHit is null ? DBNull.Value : outcome.StopHit.Value ? 1 : 0);
             cmd.Parameters.AddWithValue("$netPositive", outcome.NetPositive is null ? DBNull.Value : outcome.NetPositive.Value ? 1 : 0);
             cmd.Parameters.AddWithValue("$evaluatedAt", outcome.EvaluatedAt ?? (object)DBNull.Value);
+            cmd.ExecuteNonQuery();
+        }
+    }
+
+    /// <summary>
+    /// 把联合打分补写到已存在的行（仅当该行尚无打分时）。用途：改进特征后重跑历史回填，
+    /// 用同一自然键定位老样本、补齐 `joint_score`，而不产生重复行、不覆盖绩效。
+    /// </summary>
+    /// <remarks>打分是派生物（由 K 线复算得出），规则升级后重跑回填会覆盖旧分；绩效列不受影响。</remarks>
+    public void FillJointScore(
+        MarketKind market, TradingPair pair, string interval, string source, string side,
+        long time, bool confirmed, string origin, int score)
+    {
+        lock (_sync)
+        {
+            using var cmd = _conn.CreateCommand();
+            cmd.CommandText = """
+                UPDATE signals SET joint_score = $score
+                WHERE market = $market AND base_asset = $base AND quote_asset = $quote AND interval = $interval
+                  AND source = $source AND side = $side AND signal_time = $time AND is_confirmed = $confirmed
+                  AND origin = $origin;
+                """;
+            cmd.Parameters.AddWithValue("$market", MarketKey(market));
+            cmd.Parameters.AddWithValue("$base", pair.BaseAsset);
+            cmd.Parameters.AddWithValue("$quote", pair.QuoteAsset);
+            cmd.Parameters.AddWithValue("$interval", interval);
+            cmd.Parameters.AddWithValue("$source", source);
+            cmd.Parameters.AddWithValue("$side", side);
+            cmd.Parameters.AddWithValue("$time", time);
+            cmd.Parameters.AddWithValue("$confirmed", confirmed ? 1 : 0);
+            cmd.Parameters.AddWithValue("$origin", origin);
+            cmd.Parameters.AddWithValue("$score", score);
             cmd.ExecuteNonQuery();
         }
     }
@@ -248,7 +283,8 @@ public sealed class SignalStore : IDisposable
                price, stop_price, reference_price, note, trend_aligned, confluence, adx, atr_pct,
                bandwidth_pct, origin, recorded_at,
                outcome_status, outcome_ret, outcome_excess, outcome_mfe, outcome_mae,
-               outcome_stop_hit, outcome_net_positive, outcome_evaluated_at
+               outcome_stop_hit, outcome_net_positive, outcome_evaluated_at,
+               joint_score
         FROM signals
         """;
 
@@ -258,6 +294,7 @@ public sealed class SignalStore : IDisposable
         cmd.CommandText = """
             CREATE TABLE IF NOT EXISTS signals (
                 id                   INTEGER PRIMARY KEY AUTOINCREMENT,
+                joint_score          INTEGER,
                 market               TEXT    NOT NULL,
                 base_asset           TEXT    NOT NULL,
                 quote_asset          TEXT    NOT NULL,
@@ -294,6 +331,7 @@ public sealed class SignalStore : IDisposable
         cmd.ExecuteNonQuery();
         EnsureColumn("reference_price", "TEXT");
         EnsureColumn("kind", "TEXT");
+        EnsureColumn("joint_score", "INTEGER");
         BackfillKindFromNote();
     }
 
@@ -354,6 +392,7 @@ public sealed class SignalStore : IDisposable
                 BandwidthPct = FromText(Text(reader, 18)),
                 Origin = reader.GetString(19),
                 RecordedAt = reader.GetInt64(20),
+                JointScore = reader.IsDBNull(29) ? null : reader.GetInt32(29),
             };
             if (!reader.IsDBNull(21))
             {

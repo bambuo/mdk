@@ -65,7 +65,6 @@ const primaryItems: { key: keyof Toggles; label: string }[] = [
 ]
 
 const secondaryItems: { key: keyof Toggles; label: string }[] = [
-  { key: 'segments', label: '线段（完整缠论）' },
   { key: 'multiLevel', label: '多级别叠加' },
   { key: 'levels', label: '支撑阻力点位' },
   { key: 'ema', label: 'EMA 均线' },

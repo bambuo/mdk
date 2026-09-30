@@ -22,11 +22,11 @@ public static class Program
         MacdTests.Register(kit);
         BollingerBandsTests.Register(kit);
         AnalysisEngineTests.Register(kit);
+        JointScoreTests.Register(kit);
         ChanTests.Register(kit);
         ChanBackfillTests.Register(kit);
         ConfluenceTaggerTests.Register(kit);
         ChanLevelMapperTests.Register(kit);
-        ChanSegmentTests.Register(kit);
 
         return kit.RunAll();
     }

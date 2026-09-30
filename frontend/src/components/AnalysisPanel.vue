@@ -72,24 +72,10 @@ const alignmentOptions = [
 /** 统计面板默认收起：主视图只留信号本身 */
 const statsOpen = ref(false)
 
-/** 来源筛选：默认只看缠论（页面以缠论信号为主）；清空则显示全部来源 */
-const selectedSources = ref<string[]>(['缠论'])
-
-const allSources = computed(() => {
-  const set = new Set<string>()
-  for (const s of props.analysis?.signals ?? []) set.add(s.source)
-  return Array.from(set)
-})
-
-const sourceOptions = computed(() => allSources.value.map(s => ({ label: s, value: s })))
-
 const recentSignals = computed(() => {
   const a = props.analysis
   if (!a) return []
   let list = [...a.signals]
-  if (selectedSources.value.length) {
-    list = list.filter(s => selectedSources.value.includes(s.source))
-  }
   if (alignment.value === 'aligned') list = list.filter(s => s.trendAligned === true)
   if (alignment.value === 'counter') list = list.filter(s => s.trendAligned === false)
   if (confluenceOnly.value) list = list.filter(s => s.confluence === 'aligned')
@@ -109,13 +95,13 @@ const previewCount = computed(() => props.analysis?.signals.filter(s => !s.isCon
 const credibilityMap = computed(() => {
   const map = new Map<string, CredibilityBucket>()
   for (const bucket of props.analysis?.credibility ?? []) {
-    map.set(`${bucket.source}|${bucket.kind ?? ''}`, bucket)
+    map.set(bucket.kind ?? '', bucket)
   }
   return map
 })
 
 function bucketOf(sig: TradeSignal): CredibilityBucket | null {
-  return credibilityMap.value.get(`${sig.source}|${sig.kind ?? ''}`) ?? null
+  return credibilityMap.value.get(sig.kind ?? '') ?? null
 }
 
 function credibilityText(sig: TradeSignal): string {
@@ -159,6 +145,7 @@ function regimeClass(adx: number) {
 }
 
 function gradeColor(grade: string) {
+  if (grade === '可实盘') return '#f0b90b'   // 唯一允许对上实盘语义的档位
   if (grade === '可参考') return '#26a69a'
   if (grade === '仅观察') return '#f0b90b'
   if (grade === '不达标') return '#ef5350'
@@ -184,12 +171,7 @@ function sideColor(side: string) {
       <h3 class="card-title">
         缠论结构
         <span class="card-sub">
-          <template v-if="analysis.chan.levelMode === 'segment'">
-            {{ analysis.chan.segmentCount }} 段 · {{ analysis.chan.pivotCount }} 线段中枢
-          </template>
-          <template v-else>
-            {{ analysis.chan.strokeCount }} 笔 · {{ analysis.chan.pivotCount }} 笔中枢
-          </template>
+          {{ analysis.chan.strokeCount }} 笔 · {{ analysis.chan.pivotCount }} 笔中枢
         </span>
       </h3>
       <div class="chan-grid">
@@ -257,11 +239,6 @@ function sideColor(side: string) {
         </p>
       </div>
 
-      <!-- 线段模式：窗口内可能没有线段中枢（线段刻画趋势腿，一段可跨越数百根） -->
-      <div v-if="analysis.chan.levelMode === 'segment' && !analysis.chan.pivots.length" class="lv-hint" style="margin-top: 6px">
-        当前窗口内尚无线段中枢：线段刻画"趋势腿"，一段可跨越数百根K线，需要更长的窗口或更明确的反转才会形成线段中枢。
-      </div>
-
       <!-- 中枢列表：缠论结构的核心，最近的在前 -->
       <div v-if="analysis.chan.pivots.length" class="chan-pivots">
         <div class="pivot-hd"><span>中枢区间</span><span>笔数</span><span>状态</span></div>
@@ -278,13 +255,7 @@ function sideColor(side: string) {
       </div>
       <p v-if="analysis.chan.lastNote" class="chan-note">{{ analysis.chan.lastNote }}</p>
       <p class="chan-hint">
-        <template v-if="analysis.chan.levelMode === 'segment'">
-          线段模式：中枢由线段构成（三线段重叠），买卖点基于线段（段级背驰）；线段按特征序列法构建，最小三笔、只能被线段破坏。
-        </template>
-        <template v-else>
-          笔模式：中枢由笔构成（三笔重叠）；开启顶栏「线段」可切换为完整的线段体系。
-        </template>
-        只有已确认结构才产生买卖点。
+        笔中枢：包含处理 → 分型 → 笔 → 中枢 → 背驰 → 1/2/3 类买卖点。只有已确认结构才产生买卖点。
       </p>
     </section>
 
@@ -367,16 +338,6 @@ function sideColor(side: string) {
           <button type="button" :class="{ on: confluenceOnly }" @click="confluenceOnly = true"
                   title="只显示前 1 根高周期K线内出现同向高周期缠论信号的信号（级别共振）">只看共振</button>
         </div>
-        <a-select
-          v-model="selectedSources"
-          class="src-select"
-          size="mini"
-          multiple
-          :max-tag-count="0"
-          :options="sourceOptions"
-          placeholder="全部来源"
-          :title="'默认仅显示缠论信号；清空此项可查看全部来源'"
-        />
       </div>
 
       <a-timeline v-if="recentSignals.length" class="signals">
@@ -398,7 +359,7 @@ function sideColor(side: string) {
                 <template #content>
                   <div class="cred-tip">
                     <div class="cred-tip-title">
-                      同语境历史表现（{{ sig.source }}<template v-if="sig.kind"> {{ sig.kind }}</template>
+                      同语境历史表现（<template v-if="sig.kind">{{ sig.kind }}</template>
                       · {{ analysis.interval }}）
                     </div>
                     <template v-if="bucketOf(sig)">
@@ -413,6 +374,21 @@ function sideColor(side: string) {
                     </template>
                     <div v-else>该语境暂无已评估样本</div>
                     <div class="cred-tip-foot">口径：波次去重 · 扣费后 · 仅供判断证据强度，不构成交易建议</div>
+                  </div>
+                </template>
+              </a-tooltip>
+              <a-tooltip v-if="sig.jointScore" position="left">
+                <span class="score-badge">打分 {{ sig.jointScore.score }}/{{ sig.jointScore.maxScore }}</span>
+                <template #content>
+                  <div class="cred-tip">
+                    <div class="cred-tip-title">
+                      联合打分 {{ sig.jointScore.score }}/{{ sig.jointScore.maxScore }}
+                      （等权 5 项 · {{ sig.jointScore.kind }} 的{{ sig.jointScore.kind?.includes('3') ? '延续' : '反转' }}语义）
+                    </div>
+                    <div v-for="f in sig.jointScore.features" :key="f.name">
+                      {{ f.hit ? '✓' : '✗' }} {{ f.name }}
+                    </div>
+                    <div class="cred-tip-foot">打分不是交易授权——"可实盘"只由实盘晋升判据决定（见统计详情）</div>
                   </div>
                 </template>
               </a-tooltip>
@@ -1113,6 +1089,15 @@ function sideColor(side: string) {
   border: 1px solid var(--color-border-2);
   color: var(--color-text-3);
   white-space: nowrap;
+}
+
+.score-badge {
+  font-size: 12px;
+  padding: 1px 6px;
+  border-radius: 4px;
+  background: #23262e;
+  color: #9aa2ad;
+  cursor: default;
 }
 
 .cred-badge.good {
