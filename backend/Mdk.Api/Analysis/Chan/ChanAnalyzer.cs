@@ -18,7 +18,7 @@ public static class ChanAnalyzer
     {
         var merged = ChanInclusion.Merge(candles);
         var fractals = ChanFractalDetector.Detect(merged, candles);
-        var strokes = ChanStrokeBuilder.Build(fractals, options.MinMergedBarsBetween);
+        var strokes = ChanStrokeBuilder.Build(fractals, ChanStrokeBuilder.MinMergedBarsBetween);
 
         // 精简后统一以笔为最小单位：笔中枢 + 笔级买卖点（线段模式已移除）
         var pivots = ChanPivotDetector.Detect(strokes);
@@ -29,7 +29,7 @@ public static class ChanAnalyzer
         {
             var subMerged = ChanInclusion.Merge(sub);
             var subFractals = ChanFractalDetector.Detect(subMerged, sub);
-            var subStrokes = ChanStrokeBuilder.Build(subFractals, options.MinMergedBarsBetween);
+            var subStrokes = ChanStrokeBuilder.Build(subFractals, ChanStrokeBuilder.MinMergedBarsBetween);
             var winBars = Math.Max(1, options.SubLevelConfirmWindowBars);
             subLevelConfirmed = (referenceTime, accountingTime, side) =>
                 SubLevelMatches(sub, subStrokes, referenceTime, accountingTime, side, winBars);

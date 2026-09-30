@@ -3,8 +3,10 @@ namespace Mdk.Api.Analysis.Chan;
 /// <summary>
 /// 缠论第三步：由分型构建笔。
 ///
-/// 新笔（默认）：两个分型的中间合并K线之间至少间隔 2 根独立合并K线（MinMergedBarsBetween=2）；
-/// 老笔（Strict）：间隔至少 3 根。两套口径在不同软件中略有差异，故做成参数、默认新笔。
+/// 口径唯一化的理由：新老笔属流派分歧，本项目择新笔实现（AGENTS.md）。
+/// 曾提供 StrokeMode 配置旋钮切换，但老笔分支从未验证、取值亦无校验（拼错即静默回落），
+/// 一旦误改会让全系统的笔/中枢/买卖点静默换口径 —— 故移除旋钮（2026-09-30 用户拍板）。
+/// 新笔（本项目**唯一口径**）：两个分型的中间合并K线之间至少间隔 2 根独立合并K线。
 ///
 /// 处理规则：
 /// ① 顶底交替，同型分型只保留更极端者；
@@ -16,12 +18,15 @@ namespace Mdk.Api.Analysis.Chan;
 /// </summary>
 public static class ChanStrokeBuilder
 {
+    /// <summary>新笔口径：两分型的中间合并K线之间至少间隔 2 根独立合并K线（口径唯一，不可切换）。</summary>
+    public const int MinMergedBarsBetween = 2;
+
     /// <summary>身后至少这么多笔，当前笔才视为不可修正。</summary>
     public const int StabilityMarginStrokes = 2;
 
     public static IReadOnlyList<ChanStroke> Build(
         IReadOnlyList<ChanFractal> fractals,
-        int minMergedBarsBetween = 2,
+        int minMergedBarsBetween = MinMergedBarsBetween,
         int stabilityMarginStrokes = StabilityMarginStrokes)
     {
         var pts = BuildAlternatingSequence(fractals, minMergedBarsBetween);

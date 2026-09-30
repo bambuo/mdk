@@ -11,7 +11,6 @@ public sealed class ChanOptions
     public bool Enabled { get; set; } = true;
 
     /// <summary>笔的定义：Loose=新笔（分型间至少间隔 2 根独立合并K线），Strict=老笔（至少 3 根）。</summary>
-    public string StrokeMode { get; set; } = "Loose";
 
     /// <summary>背驰判定阈值：离开段 MACD 面积 / 进入段面积 低于该值视为背驰。</summary>
     public decimal DivergenceAreaRatio { get; set; } = 0.9m;
@@ -62,7 +61,6 @@ public sealed class ChanOptions
         bool? requireSubLevelConfirm = null, bool? multiLevel = null) => new()
     {
         Enabled = Enabled,
-        StrokeMode = StrokeMode,
         DivergenceAreaRatio = DivergenceAreaRatio,
         MaxPoints = MaxPoints,
         WarmupBars = WarmupBars,
@@ -74,5 +72,4 @@ public sealed class ChanOptions
         LowerLevelMinBars = LowerLevelMinBars,
     };
 
-    public int MinMergedBarsBetween => StrokeMode.Equals("Strict", StringComparison.OrdinalIgnoreCase) ? 3 : 2;
 }
