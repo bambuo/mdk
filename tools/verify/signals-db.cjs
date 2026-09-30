@@ -33,7 +33,7 @@ function load(dbPath) {
   try {
     return db.query(`
       SELECT market, base_asset, quote_asset, interval, source, kind, side, signal_time AS time,
-             is_confirmed, price, stop_price, reference_price, note, trend_aligned, confluence, adx,
+             is_confirmed, price, stop_price, reference_price, note, confluence, adx,
              atr_pct, bandwidth_pct, joint_score, origin, recorded_at,
              outcome_status, outcome_ret, outcome_excess, outcome_mfe, outcome_mae,
              outcome_stop_hit, outcome_net_positive, outcome_evaluated_at
@@ -58,7 +58,9 @@ function load(dbPath) {
       riskPct: ratio(num(row.stop_price) === null ? null : Math.abs(num(row.price) - num(row.stop_price)), num(row.price)),
       entryLagPct: ratio(num(row.reference_price) === null ? null : Math.abs(num(row.price) - num(row.reference_price)), num(row.price)),
       note: row.note,
-      trendAligned: bool(row.trend_aligned),
+      // trendAligned 维度已于 2026-09-30 全链路移除（列已删）：恒为 null，
+      // 依赖它的研究脚本（§0.11 已判负结果）不再可用，保留键位只为让脚本能跑完并报"样本为 0"
+      trendAligned: null,
       confluence: row.confluence,
       adx: num(row.adx),
       atrPct: num(row.atr_pct),

@@ -1,8 +1,9 @@
 <script setup lang="ts">
 import { Message } from '@arco-design/web-vue'
-import { onMounted, ref, watch } from 'vue'
-import { fetchAnalysis, fetchKlines, fetchSignalStats, fetchSymbols } from './api/client'
+import { onBeforeUnmount, onMounted, ref, watch } from 'vue'
+import { fetchAnalysis, fetchKlines, fetchSignalStats, fetchSymbols, fetchWatchlistSignals } from './api/client'
 import { useKlineSocket } from './composables/useKlineSocket'
+import { useSignalNotify } from './composables/useSignalNotify'
 import AnalysisPanel from './components/AnalysisPanel.vue'
 import ChartPanel from './components/ChartPanel.vue'
 import MonitorView from './components/MonitorView.vue'
@@ -37,14 +38,14 @@ const livePrice = ref<number | null>(null)
 const lastPushAt = ref<number | null>(null)
 // 信号历史绩效（按当前 市场/币种/周期 查询）
 const signalStats = ref<SignalStatsResponse | null>(null)
-// 浏览器提醒：新的"已确认缠论信号"推送到桌面通知（需用户授权；开关持久化在 localStorage）
-const notifyEnabled = ref(localStorage.getItem('mdk.notify') === '1')
-const seenSignals = new Set<string>()
+// 信号桌面提醒：抽到 composables/useSignalNotify（图表路径与监控列表路径共用去重与冷却）
+const {
+  notifyEnabled, setEnabled: setNotifyEnabled, primeSeen, notify,
+} = useSignalNotify()
 
 function toggleNotify() {
   if (notifyEnabled.value) {
-    notifyEnabled.value = false
-    localStorage.setItem('mdk.notify', '0')
+    setNotifyEnabled(false)
     return
   }
   if (!('Notification' in window)) {
@@ -53,33 +54,60 @@ function toggleNotify() {
   }
   Notification.requestPermission().then(permission => {
     if (permission === 'granted') {
-      notifyEnabled.value = true
-      localStorage.setItem('mdk.notify', '1')
-      Message.success('已开启信号提醒：新的已确认缠论信号会弹出桌面通知')
+      setNotifyEnabled(true)
+      Message.success('已开启信号提醒：新的已确认缠论买卖点会弹桌面通知（含监控列表，同标的 30 分钟冷却）')
     } else {
       Message.warning('通知权限被拒绝，请在浏览器设置中允许')
     }
   })
 }
 
-/** 对本次分析结果中的"新的已确认缠论信号"发桌面通知（同一信号只提醒一次） */
+/** 图表路径：对本次分析结果里的新信号发通知（WS 推送时调用） */
 function notifyNewChanSignals(result: AnalysisResult) {
-  const fresh = result.signals.filter(s =>
-    s.source === '缠论' && s.isConfirmed &&
-    !seenSignals.has(`${result.symbol}|${result.interval}|${s.side}|${s.time}|${s.note.slice(0, 8)}`))
-  for (const s of fresh) {
-    seenSignals.add(`${result.symbol}|${result.interval}|${s.side}|${s.time}|${s.note.slice(0, 8)}`)
-  }
-  if (!notifyEnabled.value || fresh.length === 0) return
-  // 只在"信号时间足够新"时提醒（历史信号/回填样本不打扰）
-  const cutoff = Date.now() / 1000 - 6 * 3600
-  for (const s of fresh.filter(x => x.time >= cutoff)) {
-    new Notification(`${result.baseAsset}/${result.quoteAsset} ${result.interval} ${s.side === 'buy' ? '买点' : '卖点'}`, {
-      body: `${s.note}\n价格 ${s.price}${s.stopPrice ? ` · 止损参考 ${s.stopPrice.toFixed(4)}` : ''}`,
-      tag: `${result.symbol}-${result.interval}-${s.time}-${s.side}`,
-    })
+  notify(result.signals
+    .filter(s => s.source === '缠论' && s.isConfirmed)
+    .map(s => ({
+      symbol: result.symbol, baseAsset: result.baseAsset, quoteAsset: result.quoteAsset,
+      interval: result.interval, side: s.side, time: s.time, note: s.note,
+      price: s.price, stopPrice: s.stopPrice,
+    })))
+}
+
+/**
+ * 监控列表路径：无论当前在看哪个图表，监控列表内出现新的已确认信号都提醒。
+ * 用 /api/watchlist/signals 轮询（后端已按监控列表过滤），只在提醒开启时轮询以省请求。
+ */
+let watchlistTimer: ReturnType<typeof setInterval> | null = null
+let watchlistPrimed = false
+
+async function pollWatchlistSignals() {
+  if (!notifyEnabled.value) return
+  try {
+    const rows = await fetchWatchlistSignals(50)
+    const items = rows.filter(r => r.source === '缠论' && r.isConfirmed).map(r => ({
+      symbol: r.symbol, baseAsset: r.baseAsset, quoteAsset: r.quoteAsset,
+      interval: r.interval, side: r.side, time: r.time, note: r.note,
+      price: r.price, stopPrice: r.stopPrice,
+    }))
+    if (!watchlistPrimed) {            // 首次轮询：全部标记已见，不打扰
+      primeSeen(items)
+      watchlistPrimed = true
+      return
+    }
+    notify(items)
+  } catch {
+    // 轮询失败静默（下一轮再试），不影响页面
   }
 }
+
+onMounted(() => {
+  watchlistTimer = setInterval(pollWatchlistSignals, 60_000)
+  void pollWatchlistSignals()
+})
+onBeforeUnmount(() => {
+  if (watchlistTimer) clearInterval(watchlistTimer)
+})
+
 const loading = ref(false)
 const errorMsg = ref('')
 const chartRef = ref<InstanceType<typeof ChartPanel> | null>(null)
@@ -173,9 +201,13 @@ const { status } = useKlineSocket(market, symbol, interval, {
 // 首次加载时把已有信号标记为"已见"，避免刚打开页面就喷一堆通知
 watch(analysis, first => {
   if (!first) return
-  for (const s of first.signals.filter(x => x.source === '缠论' && x.isConfirmed)) {
-    seenSignals.add(`${first.symbol}|${first.interval}|${s.side}|${s.time}|${s.note.slice(0, 8)}`)
-  }
+  primeSeen(first.signals
+    .filter(x => x.source === '缠论' && x.isConfirmed)
+    .map(x => ({
+      symbol: first.symbol, baseAsset: first.baseAsset, quoteAsset: first.quoteAsset,
+      interval: first.interval, side: x.side, time: x.time, note: x.note,
+      price: x.price, stopPrice: x.stopPrice,
+    })))
 })
 
 function onLocate(price: number) {
