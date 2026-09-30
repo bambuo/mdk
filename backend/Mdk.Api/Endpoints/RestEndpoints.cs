@@ -90,7 +90,7 @@ internal static class RestEndpoints
             .WithSummary("K线快照（秒级时间戳 + OHLCV）");
 
         app.MapGet("/api/analysis", async (
-                string? market, string? symbol, string? interval, int? limit, bool? segments,
+                string? market, string? symbol, string? interval, int? limit,
                 SymbolCatalog catalog, AnalysisService analysisService, CancellationToken ct) =>
             {
                 var (marketKind, pair, error) = await PairResolver.ResolveAsync(symbol, market, catalog, ct);
@@ -100,7 +100,7 @@ internal static class RestEndpoints
                 var take = Math.Clamp(limit ?? 500, 250, 1000);
                 try
                 {
-                    var result = await analysisService.AnalyzeAsync(marketKind, pair.Value, interval, take, ct, segments);
+                    var result = await analysisService.AnalyzeAsync(marketKind, pair.Value, interval, take, ct);
                     return Results.Ok(result);
                 }
                 catch (BinanceException ex)
@@ -108,7 +108,7 @@ internal static class RestEndpoints
                     return UpstreamError(ex);
                 }
             })
-            .WithSummary("趋势方向 + 关键点位 + 买卖点信号 + 指标序列（segments=true 启用线段中枢）");
+            .WithSummary("缠论结构 + 买卖点信号 + 指标序列（纯缠论）");
 
         app.MapPost("/api/backfill/run", async (
                 string? market, int? days, string? symbols, string? intervals, bool? subLevel,
@@ -147,6 +147,7 @@ internal static class RestEndpoints
                 var pool = store.Snapshot()
                     .Where(e => e.Market == marketKind
                                 && e.RecordedAt >= since
+                                && e.Source == "缠论"           // 精简为纯缠论：只统计缠论买卖点
                                 && !e.Pair.IsPegged            // 锚定币价格恒定，其样本没有交易含义
                                 && e.Outcome is { Status: "ok" })
                     // 同一信号可能先以「盘中预警」、再以「收盘确认」各记一条：统计时按信号本体去重，

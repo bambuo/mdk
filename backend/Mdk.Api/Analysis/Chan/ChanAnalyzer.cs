@@ -20,11 +20,8 @@ public static class ChanAnalyzer
         var fractals = ChanFractalDetector.Detect(merged, candles);
         var strokes = ChanStrokeBuilder.Build(fractals, options.MinMergedBarsBetween);
 
-        // 线段模式：中枢与买卖点都建立在**线段**之上（完整缠论体系）；否则沿用笔中枢机制
-        var segments = options.UseSegments ? ChanSegmentBuilder.Build(strokes) : [];
-        var useSegments = options.UseSegments && segments.Count >= ChanSegmentBuilder.MinStrokes;
-        var basis = useSegments ? segments.Select(seg => seg.AsStroke()).ToList() : strokes;
-        var pivots = ChanPivotDetector.Detect(basis);
+        // 精简后统一以笔为最小单位：笔中枢 + 笔级买卖点（线段模式已移除）
+        var pivots = ChanPivotDetector.Detect(strokes);
 
         // 次级别确认：取次级别（下一档周期）最近一根"已确认"的笔方向，与本级别信号方向比较
         Func<long, long, string, bool>? subLevelConfirmed = null;
@@ -33,33 +30,16 @@ public static class ChanAnalyzer
             var subMerged = ChanInclusion.Merge(sub);
             var subFractals = ChanFractalDetector.Detect(subMerged, sub);
             var subStrokes = ChanStrokeBuilder.Build(subFractals, options.MinMergedBarsBetween);
-            if (options.UseSegments)
-            {
-                // 与主级别同口径：次级别结构也用线段
-                var subSegments = ChanSegmentBuilder.Build(subStrokes);
-                if (subSegments.Count >= ChanSegmentBuilder.MinStrokes)
-                    subStrokes = subSegments.Select(x => x.AsStroke()).ToList();
-            }
             var winBars = Math.Max(1, options.SubLevelConfirmWindowBars);
             subLevelConfirmed = (referenceTime, accountingTime, side) =>
                 SubLevelMatches(sub, subStrokes, referenceTime, accountingTime, side, winBars);
         }
 
         var points = options.Enabled
-            ? ChanSignals.Detect(candles, basis, pivots, macdHist, atr, options.DivergenceAreaRatio, options.WarmupBars, subLevelConfirmed)
+            ? ChanSignals.Detect(candles, strokes, pivots, macdHist, atr, options.DivergenceAreaRatio, options.WarmupBars, subLevelConfirmed)
             : [];
 
         var series = BuildSeries(candles.Count, fractals, strokes, pivots);
-        if (useSegments)
-        {
-            var segLine = new decimal?[candles.Count];
-            foreach (var seg in segments)
-            {
-                if (seg.StartBarIndex >= 0 && seg.StartBarIndex < candles.Count) segLine[seg.StartBarIndex] = seg.StartPrice;
-                if (seg.EndBarIndex >= 0 && seg.EndBarIndex < candles.Count) segLine[seg.EndBarIndex] = seg.EndPrice;
-            }
-            series["chanSegment"] = segLine;
-        }
 
         // 中枢列表保持完整（摘要中的中枢数必须与图表画出的一致）；买卖点按 MaxPoints 上限取最近者
         return new ChanResult(
@@ -67,9 +47,7 @@ public static class ChanAnalyzer
             Strokes: strokes,
             Pivots: pivots,
             Points: TakeLast(points, options.MaxPoints),
-            Series: series,
-            Segments: segments,
-            LevelMode: useSegments ? "segment" : "stroke");
+            Series: series);
     }
 
     /// <summary>取末尾最多 max 个元素（保持原有顺序）。</summary>
