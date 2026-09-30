@@ -17,7 +17,6 @@ export function useKlineSocket(
   market: Ref<MarketKind>,
   symbol: Ref<string>,
   interval: Ref<string>,
-  segments: Ref<boolean>,
   handlers: KlineHandlers,
 ) {
   const status = ref<SocketStatus>('closed')
@@ -54,7 +53,7 @@ export function useKlineSocket(
     const itv = interval.value
     status.value = 'connecting'
     const proto = location.protocol === 'https:' ? 'wss:' : 'ws:'
-    const socket = new WebSocket(`${proto}//${location.host}/ws?market=${mkt}&symbol=${sym}&interval=${itv}&segments=${segments.value}`)
+    const socket = new WebSocket(`${proto}//${location.host}/ws?market=${mkt}&symbol=${sym}&interval=${itv}`)
     ws = socket
 
     socket.onopen = () => {
@@ -107,7 +106,7 @@ export function useKlineSocket(
     }, reconnectDelay)
   }
 
-  watch([market, symbol, interval, segments], () => {
+  watch([market, symbol, interval], () => {
     reconnectDelay = 1000
     connect()
   })

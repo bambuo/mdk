@@ -1,23 +1,26 @@
 <script setup lang="ts">
 import { Message } from '@arco-design/web-vue'
-import { computed, onMounted, ref, watch } from 'vue'
+import { onMounted, ref, watch } from 'vue'
 import { fetchAnalysis, fetchKlines, fetchSignalStats, fetchSymbols } from './api/client'
 import { useKlineSocket } from './composables/useKlineSocket'
 import AnalysisPanel from './components/AnalysisPanel.vue'
 import ChartPanel from './components/ChartPanel.vue'
+import MonitorView from './components/MonitorView.vue'
 import TopToolbar from './components/TopToolbar.vue'
 import type { AnalysisResult, Candle, MarketKind, SignalStatsResponse, SymbolQuote, Toggles } from './types'
+
+/** 页面视图：查看（单标的图表）/ 监控（持久化监控列表） */
+const view = ref<'chart' | 'monitor'>('chart')
 
 const symbols = ref<SymbolQuote[]>([])
 const market = ref<MarketKind>('spot')
 const symbol = ref('BTCUSDT')
 const interval = ref('1h')
 // 用 ref 而非 reactive：TopToolbar 通过 v-model:toggles 整体替换对象
-// 以缠论结构为主：缠论图层默认开；EMA/RSI/MACD 作为辅助保留；BOLL 与支撑阻力线（与中枢带争视觉）默认关
+// 纯缠论：缠论图层默认开；EMA/RSI/MACD 仅作图表指标（不再产生信号）；BOLL 与支撑阻力线默认关
 const toggles = ref<Toggles>({
   chan: true,
   multiLevel: true,
-  segments: false,
   ema: true,
   rsi: true,
   macd: true,
@@ -117,12 +120,10 @@ async function reload() {
   const requestedMarket = market.value
   const requestedSymbol = symbol.value
   const requestedInterval = interval.value
-  const requestedSegments = toggles.value.segments
   try {
     const [klines, result] = await Promise.all([
       fetchKlines(requestedMarket, requestedSymbol, requestedInterval),
-      // 必须带上结构模式：否则 REST 会返回笔模式并覆盖 WS 推来的线段模式结果（界面表现为"开关时灵时不灵"）
-      fetchAnalysis(requestedMarket, requestedSymbol, requestedInterval, 500, requestedSegments),
+      fetchAnalysis(requestedMarket, requestedSymbol, requestedInterval, 500),
     ])
     // 忽略过期响应（用户已切换市场/币种/周期）
     if (market.value !== requestedMarket || symbol.value !== requestedSymbol || interval.value !== requestedInterval) return
@@ -153,7 +154,7 @@ async function loadSignalStats() {
   }
 }
 
-const { status } = useKlineSocket(market, symbol, interval, computed(() => toggles.value.segments), {
+const { status } = useKlineSocket(market, symbol, interval, {
   onKline: candle => {
     // 先更新价格徽标：即使图表更新异常，观感上的实时性也不受影响
     livePrice.value = candle.close
@@ -181,6 +182,13 @@ function onLocate(price: number) {
   chartRef.value?.locatePrice(price)
 }
 
+/** 监控页点条目 → 回到查看页并切到该标的 */
+function onOpenFromMonitor(payload: { market: MarketKind; symbol: string }) {
+  market.value = payload.market
+  symbol.value = payload.symbol
+  view.value = 'chart'
+}
+
 /** 图表发现数据断层（如断线期间跳过多根K线）时，重新拉取快照补齐 */
 function onStale() {
   reload()
@@ -206,8 +214,6 @@ watch([symbol, interval], () => {
   loadSignalStats()
 })
 
-// 结构模式切换（线段/笔）需要重新取数（WS 也会自动重连）
-watch(() => toggles.value.segments, () => reload())
 </script>
 
 <template>
@@ -227,7 +233,11 @@ watch(() => toggles.value.segments, () => reload())
         @toggle-notify="toggleNotify"
       />
     </header>
-    <div class="body">
+    <nav class="view-tabs">
+      <button type="button" :class="{ on: view === 'chart' }" @click="view = 'chart'">查看</button>
+      <button type="button" :class="{ on: view === 'monitor' }" @click="view = 'monitor'">监控</button>
+    </nav>
+    <div class="body" v-show="view === 'chart'">
       <main class="chart-area">
         <!-- 图表常驻：切换币种/周期时只换数据，不卸载重建（否则加载期间的实时增量会丢失、缩放被重置） -->
         <ChartPanel
@@ -254,5 +264,6 @@ watch(() => toggles.value.segments, () => reload())
         <AnalysisPanel :analysis="analysis" :stats="signalStats" @locate="onLocate" />
       </aside>
     </div>
+    <MonitorView v-if="view === 'monitor'" @open="onOpenFromMonitor" />
   </div>
 </template>

@@ -26,7 +26,12 @@ builder.Services.AddSingleton(sp => new SignalStore(
     Path.Combine(sp.GetRequiredService<IHostEnvironment>().ContentRootPath, "data"),
     sp.GetRequiredService<ILogger<SignalStore>>()));
 builder.Services.AddHostedService<SignalOutcomeService>();
-builder.Services.AddHostedService<WatchlistAnalysisService>();
+// 监控列表（用户指定、持久化）与后台监控服务
+builder.Services.AddSingleton(sp => new WatchlistStore(
+    Path.Combine(sp.GetRequiredService<IHostEnvironment>().ContentRootPath, "data"),
+    sp.GetRequiredService<ILogger<WatchlistStore>>()));
+builder.Services.AddSingleton<WatchlistMonitorService>();
+builder.Services.AddHostedService(sp => sp.GetRequiredService<WatchlistMonitorService>());
 builder.Services.AddSingleton<SignalBackfillService>();
 builder.Services.AddHostedService(sp => sp.GetRequiredService<SignalBackfillService>());
 
@@ -57,6 +62,7 @@ app.MapGet("/api/health", () => Results.Ok(new
 }));
 
 RestEndpoints.Map(app);
+WatchlistEndpoints.Map(app);
 WsEndpoints.Map(app);
 
 app.Run();

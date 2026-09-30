@@ -87,3 +87,34 @@ body {
   background: #2c313a;
   border-radius: 3px;
 }
+
+/* 页面视图切换：查看（图表）/ 监控（持久化监控列表） */
+.view-tabs {
+  flex: 0 0 34px;
+  display: flex;
+  align-items: stretch;
+  gap: 2px;
+  padding: 0 10px;
+  background: #111418;
+  border-bottom: 1px solid #23262e;
+}
+
+.view-tabs button {
+  appearance: none;
+  border: none;
+  background: transparent;
+  color: #8b93a1;
+  font-size: 13px;
+  padding: 0 16px;
+  cursor: pointer;
+  border-bottom: 2px solid transparent;
+}
+
+.view-tabs button:hover {
+  color: #d1d4dc;
+}
+
+.view-tabs button.on {
+  color: #4c9aff;
+  border-bottom-color: #4c9aff;
+}
