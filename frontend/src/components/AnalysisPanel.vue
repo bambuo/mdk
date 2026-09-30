@@ -33,7 +33,7 @@ const confluenceOnly = ref(false)
 /** 共振分组绩效（来自 byConfluence） */
 const confluenceStats = computed(() => props.stats?.byConfluence ?? [])
 
-/** 次级别数据覆盖提示（覆盖不足时说明从何时开始有数据） */
+/** 次级别数据覆盖提示：次级别K线不足整个显示窗口时给出说明（结构位置面板底部展示） */
 const lowerCoverageHint = computed(() => {
   const levels = props.analysis?.chanLevels
   if (!levels) return ''
@@ -75,6 +75,49 @@ const recentSignals = computed(() => {
 const regimeStats = computed(() => props.stats?.byRegime ?? [])
 
 const previewCount = computed(() => props.analysis?.signals.filter(s => !s.isConfirmed).length ?? 0)
+
+/**
+ * 结构位置（确定性）：把后端的结构度量转成可扫读的事实。
+ * 只做格式化，不含任何推断——同一行情任何时候显示同一结果。
+ */
+const position = computed(() => props.analysis?.chan?.position ?? null)
+
+function zoneLabel(zone: string | null | undefined): string {
+  if (zone === 'above') return '中枢上方'
+  if (zone === 'below') return '中枢下方'
+  if (zone === 'in') return '中枢内'
+  return '无中枢'
+}
+
+function zoneClass(zone: string | null | undefined): string {
+  if (zone === 'above') return 'above'
+  if (zone === 'below') return 'below'
+  if (zone === 'in') return 'inside'
+  return 'none'
+}
+
+function strokeLabel(p: { strokeDirection: string; strokeConfirmed: boolean }): string {
+  if (p.strokeDirection === 'none') return '尚无已成形笔'
+  return `${p.strokeDirection === 'up' ? '向上笔' : '向下笔'}${p.strokeConfirmed ? ' 已确认' : ' 未确认（可能延伸）'}`
+}
+
+/** 回撤位置的人话：三种情形分开说，避免"−2.9% 处"这类反直觉表述 */
+function retraceLabel(p: { retracePct: number | null }): string {
+  if (p.retracePct == null) return '—'
+  const r = p.retracePct * 100
+  if (r < 0) return `已越过端点 ${Math.abs(r).toFixed(1)}%（延伸中）`
+  if (r > 100) return `全幅回撤 ${(r - 100).toFixed(1)}%（本笔或将被破坏）`
+  return `位于本笔 ${(100 - r).toFixed(1)}% 处（自极值端回撤 ${r.toFixed(1)}%）`
+}
+
+function crossLabel(c: string): { text: string; cls: string } {
+  if (c === 'aligned') return { text: '各级别同侧（一致）', cls: 'aligned' }
+  if (c === 'mixed') return { text: '各级别归属分歧', cls: 'mixed' }
+  if (c === 'single') return { text: '仅本级别有中枢', cls: 'none' }
+  return { text: '各级别均无中枢', cls: 'none' }
+}
+
+const levelName = (level: string) => (level === 'higher' ? '高周期' : level === 'lower' ? '次级别' : '本级别')
 
 /**
  * 可信度徽章：按 (来源, 类别) 到台账经验表里查同语境的**实际表现**，
@@ -167,79 +210,86 @@ function sideColor(side: string) {
 
 <template>
   <template v-if="analysis">
-    <!-- 缠论结构（分型/笔/中枢 + 最近买卖点） -->
-    <section v-if="analysis.chan" class="card">
+    <!-- 结构位置（确定性）：页面第一眼回答"价格在结构的哪里" -->
+    <section v-if="analysis.chan" class="card pos-card">
       <h3 class="card-title">
-        缠论结构
-        <span class="card-sub">
-          {{ analysis.chan.strokeCount }} 笔 · {{ analysis.chan.pivotCount }} 笔中枢
-        </span>
+        结构位置
+        <span class="card-sub">{{ analysis.interval.toUpperCase() }} · 确定性输出</span>
       </h3>
-      <div class="chan-grid">
-        <span class="k">当前笔</span>
-        <span class="v">
-          {{ analysis.chan.lastStrokeDirection === 'up' ? '向上笔' : analysis.chan.lastStrokeDirection === 'down' ? '向下笔' : '—' }}
-          <i>{{ analysis.chan.lastStrokeConfirmed ? '已确认' : '未确认（可能延伸）' }}</i>
-        </span>
-        <span class="k">最新中枢</span>
-        <span class="v">
-          <template v-if="analysis.chan.pivotZg != null">
-            {{ formatPrice(analysis.chan.pivotZd!) }} ~ {{ formatPrice(analysis.chan.pivotZg!) }}
-            <i>{{ analysis.chan.pivotStrokes }} 笔</i>
-          </template>
-          <template v-else>—</template>
-        </span>
-        <span class="k">现价位置</span>
-        <span class="v">
-          {{ analysis.chan.priceInPivot == null ? '—' : analysis.chan.priceInPivot ? '中枢内（震荡）' : '中枢外（离开段）' }}
-        </span>
-        <span class="k">最近买卖点</span>
-        <span class="v">
-          <template v-if="analysis.chan.lastKind">
-            {{ analysis.chan.lastKind }} @ {{ formatPrice(analysis.chan.lastPrice!) }}
-            <i>{{ analysis.chan.lastTime ? formatTime(analysis.chan.lastTime) : '' }}</i>
-          </template>
-          <template v-else>—</template>
-        </span>
-      </div>
-      <!-- 高周期结构上下文（级别共振的依据） -->
-      <div v-if="analysis.chan.higherContext" class="chan-higher">
-        <span class="k">高周期 {{ analysis.chan.higherContext.interval }}</span>
-        <span class="v">
-          {{ analysis.chan.higherContext.lastStrokeDirection === 'up' ? '向上笔' : analysis.chan.higherContext.lastStrokeDirection === 'down' ? '向下笔' : '—' }}
-          <i>{{ analysis.chan.higherContext.priceInPivot == null ? '' : analysis.chan.higherContext.priceInPivot ? '· 价格在中枢内' : '· 价格在中枢外' }}</i>
-          <i v-if="analysis.chan.higherContext.lastKind">
-            · 最近 {{ analysis.chan.higherContext.lastKind }}
-            <span :class="analysis.chan.higherContext.lastSide === 'buy' ? 'up' : 'down'">
-              {{ analysis.chan.higherContext.lastSide === 'buy' ? '买' : '卖' }}
-            </span>
-          </i>
-          <i>· 该周期信号 {{ analysis.chan.higherContext.signalCount }} 个</i>
-        </span>
-      </div>
 
-      <!-- 多级别中枢概览：高周期（大区间）/ 本级别 / 次级别（细粒度） -->
-      <div v-if="analysis.chanLevels && analysis.chanLevels.length > 1" class="chan-levels">
-        <div class="lv-hd"><span>级别</span><span>中枢</span><span class="ta-r">最新区间</span></div>
-        <div v-for="lv in analysis.chanLevels" :key="lv.role" class="lv-row">
-          <span class="lv-name" :class="lv.role">
-            {{ lv.role === 'higher' ? '高周期' : lv.role === 'primary' ? '本级别' : '次级别' }}
-            <i>{{ lv.interval }}</i>
+      <template v-if="position">
+        <!-- 首行：一句话结论（中枢归属 + 笔的位置） -->
+        <p class="pos-headline">
+          <span class="pos-zone" :class="zoneClass(position.pivotZone)">{{ zoneLabel(position.pivotZone) }}</span>
+          <span class="pos-sep">·</span>
+          <span class="pos-stroke">{{ strokeLabel(position) }}</span>
+        </p>
+
+        <!-- 四行确定性事实 -->
+        <div class="pos-grid">
+          <span class="k">笔</span>
+          <span class="v">
+            {{ strokeLabel(position) }}
+            <i>已运行 {{ position.strokeBars }} 根</i>
           </span>
-          <span class="lv-count">{{ lv.pivots.length }}</span>
-          <span class="lv-range ta-r">
-            <template v-if="lv.pivots.length">
-              {{ formatPrice(lv.pivots[lv.pivots.length - 1].zd) }} ~ {{ formatPrice(lv.pivots[lv.pivots.length - 1].zg) }}
+
+          <span class="k">笔内位置</span>
+          <span class="v">{{ retraceLabel(position) }}</span>
+
+          <span class="k">中枢</span>
+          <span class="v">
+            <template v-if="position.pivotZg != null">
+              {{ formatPrice(position.pivotZd!) }} ~ {{ formatPrice(position.pivotZg!) }}
+              <i>{{ position.pivotStrokes }} 笔 · 已 {{ position.pivotBars }} 根</i>
             </template>
             <template v-else>—</template>
           </span>
-        </div>
-        <p class="lv-hint">
-          色带：<span class="dot higher" />高周期 <span class="dot primary" />本级别 <span class="dot lower" />次级别
-          <template v-if="lowerCoverageHint"> · {{ lowerCoverageHint }}</template>
-        </p>
-      </div>
 
+          <span class="k">距边界</span>
+          <span class="v">
+            <template v-if="position.edgeDistancePct != null">
+              {{ (position.edgeDistancePct * 100).toFixed(2) }}%
+              <i v-if="position.edgeDistanceAtr != null">（{{ position.edgeDistanceAtr.toFixed(1) }}×ATR）</i>
+            </template>
+            <template v-else>中枢内</template>
+          </span>
+
+          <span class="k">结构参照</span>
+          <span class="v">
+            <template v-if="position.lastKind">
+              {{ position.lastKind }}
+              <i>{{ position.barsSinceLastSignal === 0 ? '本根' : `${position.barsSinceLastSignal} 根前` }}</i>
+              <template v-if="position.invalidationPrice != null">
+                · 失效位 {{ formatPrice(position.invalidationPrice) }}
+                <i v-if="position.distanceToInvalidationPct != null">距现价 {{ (position.distanceToInvalidationPct * 100).toFixed(2) }}%</i>
+              </template>
+            </template>
+            <template v-else>窗口内暂无买卖点</template>
+          </span>
+        </div>
+
+        <!-- 级别对照：同一现价在各级别中枢的归属 -->
+        <div v-if="position.levels.length" class="pos-levels">
+          <div class="lv-hd"><span>级别</span><span>中枢</span><span class="ta-r">归属</span></div>
+          <div v-for="lv in position.levels" :key="lv.level" class="lv-row">
+            <span class="lv-name" :class="lv.level">{{ levelName(lv.level) }} <i>{{ lv.interval }}</i></span>
+            <span class="lv-count">{{ lv.pivotZg != null ? `${formatPrice(lv.pivotZd!)} ~ ${formatPrice(lv.pivotZg)}` : '无中枢' }}</span>
+            <span class="ta-r pos-zone-sm" :class="zoneClass(lv.zone)">
+              {{ zoneLabel(lv.zone) }}<template v-if="lv.distancePct != null"><i> {{ (lv.distancePct * 100).toFixed(2) }}%</i></template>
+            </span>
+          </div>
+          <p class="lv-hint" :class="crossLabel(position.crossLevel).cls">
+            {{ crossLabel(position.crossLevel).text }}
+            <template v-if="lowerCoverageHint"> · {{ lowerCoverageHint }}</template>
+          </p>
+        </div>
+      </template>
+      <div v-else class="chan-grid">
+        <span class="k">当前笔</span>
+        <span class="v">{{ analysis.chan.lastStrokeDirection === 'up' ? '向上笔' : analysis.chan.lastStrokeDirection === 'down' ? '向下笔' : '—' }}<i>{{ analysis.chan.lastStrokeConfirmed ? '已确认' : '未确认' }}</i></span>
+        <span class="k">最新中枢</span>
+        <span class="v"><template v-if="analysis.chan.pivotZg != null">{{ formatPrice(analysis.chan.pivotZd!) }} ~ {{ formatPrice(analysis.chan.pivotZg!) }}<i>{{ analysis.chan.pivotStrokes }} 笔</i></template><template v-else>—</template></span>
+      </div>
       <!-- 中枢列表：缠论结构的核心，最近的在前 -->
       <div v-if="analysis.chan.pivots.length" class="chan-pivots">
         <div class="pivot-hd"><span>中枢区间</span><span>笔数</span><span>状态</span></div>
@@ -312,16 +362,10 @@ function sideColor(side: string) {
           <div v-if="stats.overall" class="tbl-foot">
             分级依据：{{ stats.overall.gradeReason }}
           </div>
-          <!-- 实盘晋升进度：让"离可实盘还差多少"可见，而不是只显示一个档位 -->
+          <!-- 样本构成：实时样本只是事实计数（"可实盘"判据已废弃，系统不给出交易授权） -->
           <div class="tbl-note gate">
-            <span class="k">实盘判据</span>
-            <span class="v">
-              实时波次 {{ stats.realtimeEpisodes }} / {{ stats.realtimeRequired }}
-              <i v-if="stats.realtimeEpisodes < stats.realtimeRequired">
-                （窗口共 {{ stats.windowEpisodes }} 波，还差 {{ stats.realtimeRequired - stats.realtimeEpisodes }} 波实时样本）
-              </i>
-              <i v-else>（样本量已达标，需同时满足 t≥2 · 中位超额>0 · 扣费后为正≥55% · 分半稳定 · 单标的≤40% · MAE≤1R）</i>
-            </span>
+            <span class="k">样本构成</span>
+            <span class="v">窗口 {{ stats.windowEpisodes }} 波，其中实时落库 {{ stats.realtimeEpisodes }} 波<i>（其余为历史回算）</i></span>
           </div>
           <div class="tbl-foot">{{ stats.windowBasis }} · 持有 12 根 · 已扣费（现货往返 0.2%） · 门槛：独立波次 ≥30 且 t≥2 且扣费后为正 ≥50% 且中位超额 >0 且单标的 ≤50%</div>
         </div>
@@ -474,6 +518,96 @@ function sideColor(side: string) {
 </template>
 
 <style scoped>
+/* ── 结构位置（确定性面板） ── */
+.pos-card .pos-headline {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin: 0 0 8px;
+  font-size: 13px;
+  font-weight: 600;
+  flex-wrap: wrap;
+}
+
+.pos-zone {
+  padding: 1px 7px;
+  border-radius: 3px;
+  border: 1px solid #2a2f38;
+  font-weight: 600;
+}
+
+.pos-zone.above {
+  color: #26a69a;
+  border-color: rgba(38, 166, 154, 0.45);
+  background: rgba(38, 166, 154, 0.08);
+}
+
+.pos-zone.below {
+  color: #ef5350;
+  border-color: rgba(239, 83, 80, 0.45);
+  background: rgba(239, 83, 80, 0.08);
+}
+
+.pos-zone.inside {
+  color: #f0b90b;
+  border-color: rgba(240, 185, 11, 0.4);
+  background: rgba(240, 185, 11, 0.06);
+}
+
+.pos-zone.none {
+  color: #6b7280;
+}
+
+.pos-sep {
+  color: #3a4048;
+}
+
+.pos-stroke {
+  color: #9aa3b0;
+  font-weight: 400;
+}
+
+.pos-grid {
+  display: grid;
+  grid-template-columns: 62px 1fr;
+  row-gap: 5px;
+  column-gap: 8px;
+  font-size: 12px;
+}
+
+.pos-grid .k {
+  color: #6b7280;
+}
+
+.pos-grid .v {
+  color: #c3c8d0;
+}
+
+.pos-grid .v i {
+  font-style: normal;
+  color: #6b7280;
+  margin-left: 4px;
+}
+
+.pos-levels {
+  margin-top: 10px;
+  padding-top: 8px;
+  border-top: 1px solid #1b1e24;
+}
+
+.pos-zone-sm {
+  font-size: 11px;
+}
+
+.pos-zone-sm.above { color: #26a69a; }
+.pos-zone-sm.below { color: #ef5350; }
+.pos-zone-sm.inside { color: #f0b90b; }
+.pos-zone-sm.none { color: #6b7280; }
+
+.lv-hint.aligned { color: #26a69a; }
+.lv-hint.mixed { color: #f0b90b; }
+.lv-hint.none { color: #6b7280; }
+
 /* ── 缠论结构卡片 ── */
 .chan-grid {
   display: grid;

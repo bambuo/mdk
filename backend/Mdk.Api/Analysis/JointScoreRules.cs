@@ -13,8 +13,8 @@ namespace Mdk.Api.Analysis;
 ///
 /// 分档：低 ≤2 / 中 3 / 高 ≥4。
 ///
-/// 纪律：得分高**不等于**可实盘。"可实盘"由 <see cref="SignalQualityRules.TradableGate"/> 的实盘晋升判据决定；
-/// 打分未通过预注册检验前只作事实聚合展示。
+/// 纪律：得分高**不等于**可交易。v2 于未挖窗口检验仍未通过（PLAN §0.19），因此打分只作**事实聚合展示**；
+/// "可实盘"档已废弃（判据依赖本质不确定的统计优势，见 SignalQualityRules 注释）。
 /// </summary>
 public static class JointScoreRules
 {

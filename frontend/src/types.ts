@@ -99,6 +99,47 @@ export interface TradeSignal {
   } | null
 }
 
+/** 某个级别的中枢归属（确定性） */
+export interface LevelPosition {
+  level: 'higher' | 'primary' | 'lower'
+  interval: string
+  zone: 'above' | 'in' | 'below' | 'none'
+  distancePct: number | null
+  pivotZg: number | null
+  pivotZd: number | null
+  pivotStrokes: number
+}
+
+/**
+ * 价格在结构中的位置——**确定性输出**（同一行情任何时候结果一致），不含概率推断。
+ * 回答"价格处在结构的哪里"，不回答"该不该买"。
+ */
+export interface StructurePosition {
+  strokeDirection: 'up' | 'down' | 'none'
+  strokeConfirmed: boolean
+  strokeFrom: number | null
+  strokeTo: number | null
+  /** 自本笔极值端回撤 ÷ 本笔幅度（0=极值端，1=回到起点，<0 越过端点，>1 全幅回撤） */
+  retracePct: number | null
+  strokeBars: number
+  pivotZone: 'above' | 'in' | 'below' | 'none'
+  pivotZg: number | null
+  pivotZd: number | null
+  pivotStrokes: number
+  pivotBars: number
+  edgeDistancePct: number | null
+  /** 距中枢边界 ÷ ATR（跨标的可比的"几倍 ATR"） */
+  edgeDistanceAtr: number | null
+  invalidationPrice: number | null
+  distanceToInvalidationPct: number | null
+  lastKind: string | null
+  barsSinceLastSignal: number | null
+  levels: LevelPosition[]
+  crossLevel: 'aligned' | 'mixed' | 'single' | 'none'
+  /** 一句话人话描述（可直接展示） */
+  summary: string
+}
+
 export interface MacdSeries {
   dif: (number | null)[]
   dea: (number | null)[]
@@ -144,6 +185,8 @@ export interface ChanSummary {
   lastPrice: number | null
   lastNote: string | null
   pivots: ChanPivotInfo[]
+  /** 价格在结构中的位置（确定性输出；旧后端可能为空） */
+  position?: StructurePosition | null
   /** 高周期结构上下文（级别共振的依据） */
   higherContext: {
     interval: string
@@ -233,10 +276,8 @@ export interface SignalStatsResponse {
   windowBasis: string
   /** 窗口内独立波次数（实盘判据的样本量） */
   windowEpisodes: number
-  /** 其中实时落库的独立波次数（实盘判据要求 ≥ realtimeRequired） */
+  /** 其中实时落库的独立波次数（事实计数；"可实盘"判据已废弃） */
   realtimeEpisodes: number
-  /** 实盘判据要求的实时波次门槛 */
-  realtimeRequired: number
   totalEvaluated: number
   overall: SignalSourceStats | null
   bySource: SignalSourceStats[]

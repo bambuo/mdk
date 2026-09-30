@@ -121,9 +121,9 @@ public static class CredibilityTests
             Assert.Equal(0.02m, bucket.MedianRiskPct, 6);   // |100−98|/100
         });
 
-        // ─────────────────── 实盘晋升判据（预注册阈值锁定） ───────────────────
+        // ─────────────────── 实时样本口径（判据已废弃，仅保留事实计数的口径校验） ───────────────────
 
-        t.Case("实盘判据_实时落库口径_回算不算数", () =>
+        t.Case("实时口径_回算不算作实时样本", () =>
         {
             var sec = MarketIntervals.IntervalSeconds("1h");
             var realtime = Entry("BTCUSDT", 1_000_000, 0.01m, 0.005m, 100m, 98m);
@@ -132,40 +132,6 @@ public static class CredibilityTests
             backfill.RecordedAt = 2_000_000 + (long)(2.5m * sec);        // 2.5 根后 → 回算
             Assert.Equal(true, SignalQualityRules.IsRealtimeRecorded(realtime));
             Assert.Equal(false, SignalQualityRules.IsRealtimeRecorded(backfill));
-        });
-
-        t.Case("实盘判据_实时波次不足_不予晋升", () =>
-        {
-            var reps = RealtimeEpisodes(waves: 60);
-            var (ok, reason) = SignalQualityRules.TradableGate(reps);
-            Assert.Equal(false, ok);
-            Assert.Contains("实时独立波次 60 < 100", reason);
-        });
-
-        t.Case("实盘判据_全部达标_才予晋升", () =>
-        {
-            var reps = RealtimeEpisodes(waves: 120);
-            var (ok, reason) = SignalQualityRules.TradableGate(reps);
-            Assert.Equal(true, ok);
-            Assert.Contains("波次 120", reason);
-            Assert.Contains("分半稳定", reason);
-        });
-
-        t.Case("实盘判据_时间分半不稳定_不予晋升", () =>
-        {
-            // 前半大正 / 后半微负：整体 t 仍 ≥2，但分半检查必须拦下（样本外已失效）
-            var reps = RealtimeEpisodes(waves: 120, firstHalfExcess: 0.02m, secondHalfExcess: -0.0001m);
-            var (ok, reason) = SignalQualityRules.TradableGate(reps);
-            Assert.Equal(false, ok);
-            Assert.Contains("时间分半不稳定", reason);
-        });
-
-        t.Case("实盘判据_MAE超过1R_不予晋升", () =>
-        {
-            var reps = RealtimeEpisodes(waves: 120, maeR: 1.5m);
-            var (ok, reason) = SignalQualityRules.TradableGate(reps);
-            Assert.Equal(false, ok);
-            Assert.Contains("MAE 中位 1.50R > 1R", reason);
         });
 
         t.Case("可信度_扣费后为正按波次口径统计", () =>
@@ -201,29 +167,6 @@ public static class CredibilityTests
             StopHit = false, NetPositive = netPositive, EvaluatedAt = time,
         },
     };
-
-    /// <summary>
-    /// 构造实时落库的独立波次样本：跨 3 个标的、间隔 30 根、前后两半的超额可分别控制、MAE 可控。
-    /// </summary>
-    private static List<SignalEntry> RealtimeEpisodes(
-        int waves, decimal firstHalfExcess = 0.004m, decimal secondHalfExcess = 0.006m,
-        decimal netPositiveRate = 0.6m, decimal maeR = 0.5m)
-    {
-        var items = new List<SignalEntry>();
-        var symbols = new[] { "AAAUSDT", "BBBUSDT", "CCCUSDT" };
-        var sec = MarketIntervals.IntervalSeconds("1h");
-        for (var i = 0; i < waves; i++)
-        {
-            var e = Entry(
-                symbol: symbols[i % symbols.Length], time: 1_000_000 + i * 30 * 3600L,
-                ret: 0.01m, excess: i < waves / 2 ? firstHalfExcess : secondHalfExcess,
-                price: 100m, stop: 98m, netPositive: i < waves * netPositiveRate);
-            e.RecordedAt = e.Time + sec;                       // 1 根内落库 = 实时
-            e.Outcome!.Mae = -0.02m * maeR;                    // dir=1：|MAE| = riskPct × maeR = 0.02m × maeR
-            items.Add(e);
-        }
-        return items;
-    }
 
     /// <summary>构造 n 条样本：同币种间隔 30 根（各自独立成波）；spreadOverSymbols 时轮流换标的。</summary>
     private static List<SignalEntry> Entries(int wins, int losses, string symbol, bool spreadOverSymbols = false)

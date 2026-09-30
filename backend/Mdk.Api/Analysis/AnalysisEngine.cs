@@ -239,7 +239,8 @@ public static class AnalysisEngine
                 ? null
                 : BuildChanSummary(candles, chanResult,
                     htfChan is null || htfInterval is null ? null : BuildHigherContext(htfCandles!, htfChan, htfInterval),
-                    annotatedPrimaryPivots),
+                    annotatedPrimaryPivots,
+                    BuildStructurePosition(candles, chanResult, atr, chanLevels)),
             chanLevels);
     }
 
@@ -266,9 +267,38 @@ public static class AnalysisEngine
     private static string LastDirection(Chan.ChanResult result) =>
         result.Strokes.Count == 0 ? "none" : result.Strokes[^1].IsUp ? "up" : "down";
 
+    /// <summary>结构位置：本级别归属 + 各级别（含高/次级别）中枢归属对照（确定性计算，见 StructurePositionCalculator）。</summary>
+    private static StructurePosition BuildStructurePosition(
+        IReadOnlyList<Candle> candles, Chan.ChanResult result, decimal?[] atr,
+        IReadOnlyList<ChanLevelStructure>? levels)
+    {
+        var last = candles[^1].Close;
+        var levelPositions = (levels ?? [])
+            .Select(lv => ToLevelPosition(lv, last))
+            .ToList();
+        return StructurePositionCalculator.Compute(candles, result, atr, levelPositions);
+    }
+
+    /// <summary>某个级别的中枢归属（用该级别自己的中枢上下沿与同一现价判定）。</summary>
+    private static LevelPosition ToLevelPosition(ChanLevelStructure level, decimal price)
+    {
+        var pivot = level.Pivots.Count > 0 ? level.Pivots[^1] : null;
+        if (pivot is null)
+            return new LevelPosition(level.Role, level.Interval, "none", null, null, null, 0);
+        var zone = price >= pivot.Zd && price <= pivot.Zg ? "in" : price > pivot.Zg ? "above" : "below";
+        var distance = zone switch
+        {
+            "above" => (price - pivot.Zg) / price,
+            "below" => (pivot.Zd - price) / price,
+            _ => (decimal?)null
+        };
+        return new LevelPosition(level.Role, level.Interval, zone, distance, pivot.Zg, pivot.Zd, pivot.Strokes);
+    }
+
     private static ChanSummary BuildChanSummary(
         IReadOnlyList<Candle> candles, Chan.ChanResult result, ChanContextSummary? higherContext = null,
-        IReadOnlyList<ChanPivotInfo>? annotatedPivots = null)
+        IReadOnlyList<ChanPivotInfo>? annotatedPivots = null,
+        StructurePosition? position = null)
     {
         var lastStroke = result.Strokes.Count > 0 ? result.Strokes[^1] : default;
         var pivot = result.Pivots.Count > 0 ? result.Pivots[^1] : (Chan.ChanPivot?)null;
@@ -294,7 +324,8 @@ public static class AnalysisEngine
             LastPrice: lastPoint?.Price,
             LastNote: lastPoint?.Note,
             Pivots: visiblePivots,
-            HigherContext: higherContext);
+            HigherContext: higherContext,
+            Position: position);
     }
 
     /// <summary>

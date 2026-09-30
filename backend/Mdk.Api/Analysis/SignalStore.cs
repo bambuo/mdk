@@ -561,10 +561,8 @@ public sealed record SignalStatsResponse(
     string WindowBasis,
     /// <summary>窗口内的独立波次数（当前生效的实盘判据样本量）。</summary>
     int WindowEpisodes,
-    /// <summary>其中**实时落库**的独立波次数（实盘判据要求 ≥ SignalQualityRules.RealtimeMinEpisodes）。</summary>
+    /// <summary>其中**实时落库**的独立波次数（事实计数；"可实盘"判据已废弃，见 SignalQualityRules 注释）。</summary>
     int RealtimeEpisodes,
-    /// <summary>实盘晋升判据要求的实时波次门槛（界面用于显示进度 x/门槛）。</summary>
-    int RealtimeRequired,
     int TotalEvaluated,
     SignalSourceStats? Overall,
     IReadOnlyList<SignalSourceStats> BySource,

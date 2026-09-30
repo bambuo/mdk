@@ -112,7 +112,12 @@ public sealed record ChanSummary(
     string? LastNote,
     IReadOnlyList<ChanPivotInfo> Pivots,
     /// <summary>高周期结构上下文（无高周期数据时为 null）。</summary>
-    ChanContextSummary? HigherContext = null);
+    ChanContextSummary? HigherContext = null,
+    /// <summary>
+    /// 价格在结构中的位置（**确定性输出**，不含概率推断）：本笔方向与回撤位置、中枢归属与距离、
+    /// 最近买卖点的结构失效位距离、多级别归属是否一致。回答"价格处在结构的哪里"，而非"该不该买"。
+    /// </summary>
+    StructurePosition? Position = null);
 
 /// <summary>一次完整的分析结果（REST /api/analysis 与 WS analysis 推送共用此结构）。</summary>
 public sealed record AnalysisResult(

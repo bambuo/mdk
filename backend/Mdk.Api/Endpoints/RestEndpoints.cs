@@ -209,7 +209,6 @@ internal static class RestEndpoints
                     WindowBasis: $"按记录时间近 {daysClamped} 天（回填样本的记录时间=运行时刻）",
                     WindowEpisodes: windowEpisodes.Count,
                     RealtimeEpisodes: windowEpisodes.Count(SignalQualityRules.IsRealtimeRecorded),
-                    RealtimeRequired: SignalQualityRules.RealtimeMinEpisodes,
                     TotalEvaluated: pool.Count,
                     Overall: Summarize("全部", pool),
                     BySource: bySource,
