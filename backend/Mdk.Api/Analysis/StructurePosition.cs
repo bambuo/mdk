@@ -44,9 +44,12 @@ public sealed record StructurePosition(
     decimal? EdgeDistancePct,
     /// <summary>同上，但以 ATR 归一（"离中枢上沿 0.8×ATR"比百分比更跨标的可比）。</summary>
     decimal? EdgeDistanceAtr,
-    /// <summary>最近买卖点的结构失效位（止损参考）与当前价的距离占价格比例——即"1R 有多远"。</summary>
+    /// <summary>结构失效位：最近买卖点所依据的参考极值（价格回到该位，结构前提即不成立）。</summary>
     decimal? InvalidationPrice,
-    decimal? DistanceToInvalidationPct,
+    /// <summary>止损参考：结构失效位上加减 ATR 缓冲后的可执行价位（≠ 失效位）。</summary>
+    decimal? StopReferencePrice,
+    /// <summary>现价距**止损参考**的距离占价格比例——即"1R 有多远"。</summary>
+    decimal? DistanceToStopReferencePct,
     /// <summary>最近买卖点类别 / 距今根数（事实陈述，不含绩效推断）。</summary>
     string? LastKind,
     int? BarsSinceLastSignal,
@@ -123,10 +126,11 @@ public static class StructurePositionCalculator
             edgeDistanceAtr = Math.Abs(last - edge) / a;
         }
 
-        // ── 最近买卖点的结构失效位：当前价距它多远（= 1R 的距离）──
+        // ── 最近买卖点：结构失效位（参考极值）与止损参考（含 ATR 缓冲）分列，口径见 LANGUAGE.md §7 ──
         var lastPoint = result.Points.Count > 0 ? result.Points[^1] : null;
-        decimal? invalidPrice = lastPoint?.StopPrice;
-        decimal? invalidDistance = invalidPrice is { } stop && last > 0 ? Math.Abs(last - stop) / last : null;
+        decimal? invalidPrice = lastPoint?.ReferencePrice;
+        decimal? stopRef = lastPoint?.StopPrice;
+        decimal? stopDistance = stopRef is { } stop && last > 0 ? Math.Abs(last - stop) / last : null;
         var barsSince = 0;
         if (lastPoint is { } lp)
         {
@@ -137,7 +141,7 @@ public static class StructurePositionCalculator
         var crossLevel = CrossLevelOf(levels, zone);
         var summary = Describe(strokeOrNull?.IsUp, strokeOrNull?.IsConfirmed ?? false, retrace,
             zone, pivot is not null, pivotStrokes, edgeDistanceAtr, edgeDistancePct,
-            lastPoint?.Kind, barsSince, invalidDistance, crossLevel);
+            lastPoint?.Kind, barsSince, stopDistance, stopRef, invalidPrice, crossLevel);
 
         return new StructurePosition(
             StrokeDirection: strokeOrNull is not { } st ? "none" : st.IsUp ? "up" : "down",
@@ -154,7 +158,8 @@ public static class StructurePositionCalculator
             EdgeDistancePct: edgeDistancePct,
             EdgeDistanceAtr: edgeDistanceAtr,
             InvalidationPrice: invalidPrice,
-            DistanceToInvalidationPct: invalidDistance,
+            StopReferencePrice: stopRef,
+            DistanceToStopReferencePct: stopDistance,
             LastKind: lastPoint?.Kind,
             BarsSinceLastSignal: lastPoint is null ? null : barsSince,
             Levels: levels,
@@ -173,7 +178,8 @@ public static class StructurePositionCalculator
     /// <summary>一句话描述（交易语言，不带预测口吻）。</summary>
     private static string Describe(
         bool? isUp, bool confirmed, decimal? retrace, string zone, bool hasPivot, int pivotStrokes,
-        decimal? edgeAtr, decimal? edgePct, string? kind, int barsSince, decimal? invalidPct, string crossLevel)
+        decimal? edgeAtr, decimal? edgePct, string? kind, int barsSince,
+        decimal? stopDistancePct, decimal? stopRef, decimal? invalidPrice, string crossLevel)
     {
         var parts = new List<string>();
 
@@ -212,9 +218,10 @@ public static class StructurePositionCalculator
         {
             parts.Add(barsSince == 0 ? $"最近买卖点 {kind}（本根）" : $"最近买卖点 {kind}（{barsSince} 根前）");
         }
-        if (invalidPct is { } iv)
+        if (stopDistancePct is { } sd)
         {
-            parts.Add($"距其结构失效位 {iv * 100m:0.##}%");
+            parts.Add($"距其止损参考 {sd * 100m:0.##}%" +
+                      (invalidPrice is { } inv ? $"（结构失效位 {inv:0.##}）" : ""));
         }
 
         parts.Add(crossLevel switch

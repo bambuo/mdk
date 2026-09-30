@@ -74,10 +74,14 @@ public static class StructurePositionTests
             Assert.Equal(true, r.EdgeDistancePct is null && r.EdgeDistanceAtr is null);
         });
 
-        t.Case("结构位置_结构失效位距离_等于1R口径", () =>
+        t.Case("结构位置_失效位与止损参考分列_距离按止损参考算", () =>
         {
-            var r = Compute(lastPrice: 100m, zg: 105m, zd: 95m, lastKind: "3买", stopPrice: 98m, barsSince: 3);
-            Assert.Equal(0.02m, r.DistanceToInvalidationPct!.Value, 8);
+            // 参考极值（结构失效位）97、止损参考 98（极值 + ATR 缓冲）——两者是不同的价位
+            var r = Compute(lastPrice: 100m, zg: 105m, zd: 95m, lastKind: "3买",
+                stopPrice: 98m, referencePrice: 97m, barsSince: 3);
+            Assert.Equal(97m, r.InvalidationPrice!.Value, 8);        // 失效位 = 参考极值
+            Assert.Equal(98m, r.StopReferencePrice!.Value, 8);       // 止损参考 = 含缓冲
+            Assert.Equal(0.02m, r.DistanceToStopReferencePct!.Value, 8);   // 1R 按止损参考
             Assert.Equal("3买", r.LastKind);
             Assert.Equal(3, r.BarsSinceLastSignal);
         });
@@ -115,7 +119,8 @@ public static class StructurePositionTests
     private static StructurePosition Compute(
         decimal lastPrice, decimal? zg, decimal? zd,
         decimal? strokeFrom = null, decimal? strokeTo = null, bool isUp = true,
-        decimal? atr = null, string? lastKind = null, decimal? stopPrice = null, int barsSince = 0,
+        decimal? atr = null, string? lastKind = null, decimal? stopPrice = null, decimal? referencePrice = null,
+        int barsSince = 0,
         IReadOnlyList<LevelPosition>? levels = null)
     {
         var candles = Enumerable.Range(0, 10)
@@ -141,7 +146,7 @@ public static class StructurePositionTests
             points.Add(new ChanBuySellPoint(
                 Kind: lastKind, Side: lastKind.EndsWith('买') ? "buy" : "sell",
                 Time: candles[candles.Count - 1 - barsSince].Time, Price: lastPrice * 0.98m,
-                ReferencePrice: lastPrice * 0.97m, ReferenceBarIndex: 6,
+                ReferencePrice: referencePrice ?? lastPrice * 0.97m, ReferenceBarIndex: 6,
                 StopPrice: stopPrice ?? 0m, AreaRatio: null, Note: ""));
         }
         var result = new ChanResult([], strokes, pivots, points, new Dictionary<string, decimal?[]>());

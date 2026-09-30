@@ -177,7 +177,9 @@ public static class ChanSignals
             : bar.Close * 0.01m;
         var stop = side == "buy" ? referencePrice - 0.5m * atrValue : referencePrice + 0.5m * atrValue;
 
-        // 确认时价格若已越过结构失效位，该信号按定义已不可交易（止损落到入场价反向侧）→ 丢弃
+        // 可交易性校验：确认时价格若已越过**止损参考**（= 参考极值 ∓0.5×ATR），
+        // 该信号按定义已不可执行（止损落到入场价反向侧）→ 丢弃。
+        // 注意口径：止损参考含 ATR 缓冲，与**结构失效位**（参考极值本身）不是同一个价位（LANGUAGE.md §7）
         if (side == "buy" && stop >= bar.Close) return false;
         if (side == "sell" && stop <= bar.Close) return false;
 

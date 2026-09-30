@@ -130,8 +130,12 @@ export interface StructurePosition {
   edgeDistancePct: number | null
   /** 距中枢边界 ÷ ATR（跨标的可比的"几倍 ATR"） */
   edgeDistanceAtr: number | null
+  /** 结构失效位 = 买卖点所依据的参考极值（价格回到此位，结构前提即不成立） */
   invalidationPrice: number | null
-  distanceToInvalidationPct: number | null
+  /** 止损参考 = 失效位加减 ATR 缓冲后的可执行价位（≠ 失效位） */
+  stopReferencePrice: number | null
+  /** 现价距止损参考的距离（= 1R 有多远） */
+  distanceToStopReferencePct: number | null
   lastKind: string | null
   barsSinceLastSignal: number | null
   levels: LevelPosition[]

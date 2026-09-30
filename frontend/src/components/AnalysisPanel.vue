@@ -48,8 +48,8 @@ const lowerCoverageHint = computed(() => {
 /** 中枢的级别归属说明 */
 function pivotTooltip(p: { insideHigher?: boolean | null; lowerPivotCount?: number | null }) {
   const parts: string[] = []
-  if (p.insideHigher === true) parts.push('位于高周期中枢区域内（大级别震荡中）')
-  if (p.insideHigher === false) parts.push('不在高周期中枢区域内（大级别之外）')
+  if (p.insideHigher === true) parts.push('位于高级别中枢区域内（大级别震荡中）')
+  if (p.insideHigher === false) parts.push('不在高级别中枢区域内（大级别之外）')
   if (p.lowerPivotCount != null) parts.push(`运行期间形成 ${p.lowerPivotCount} 个次级别中枢`)
   return parts.join(' · ')
 }
@@ -117,10 +117,10 @@ function crossLabel(c: string): { text: string; cls: string } {
   return { text: '各级别均无中枢', cls: 'none' }
 }
 
-const levelName = (level: string) => (level === 'higher' ? '高周期' : level === 'lower' ? '次级别' : '本级别')
+const levelName = (level: string) => (level === 'higher' ? '高级别' : level === 'lower' ? '次级别' : '本级别')
 
 /**
- * 可信度徽章：按 (来源, 类别) 到台账经验表里查同语境的**实际表现**，
+ * 证据强度徽章：按 (来源, 类别) 到台账经验表里查同语境的**实际表现**，
  * 不做加权、不给"置信度分数"——只陈述样本量、胜率区间与扣费后为正比例；
  * 波次不足时明确显示"样本不足"（口径见后端 SignalCredibilityRules）。
  */
@@ -259,9 +259,12 @@ function sideColor(side: string) {
             <template v-if="position.lastKind">
               {{ position.lastKind }}
               <i>{{ position.barsSinceLastSignal === 0 ? '本根' : `${position.barsSinceLastSignal} 根前` }}</i>
+              <template v-if="position.stopReferencePrice != null">
+                · 止损参考 {{ formatPrice(position.stopReferencePrice) }}
+                <i v-if="position.distanceToStopReferencePct != null">距现价 {{ (position.distanceToStopReferencePct * 100).toFixed(2) }}%</i>
+              </template>
               <template v-if="position.invalidationPrice != null">
-                · 失效位 {{ formatPrice(position.invalidationPrice) }}
-                <i v-if="position.distanceToInvalidationPct != null">距现价 {{ (position.distanceToInvalidationPct * 100).toFixed(2) }}%</i>
+                <i>（结构失效位 {{ formatPrice(position.invalidationPrice) }}）</i>
               </template>
             </template>
             <template v-else>窗口内暂无买卖点</template>
@@ -313,7 +316,7 @@ function sideColor(side: string) {
     <!-- 概念三：买卖点（含分级与历史绩效） -->
     <section class="card">
       <h3 class="card-title">
-        买卖信号
+        缠论买卖点
         <span class="card-sub">
           显示 {{ recentSignals.length }} / 共 {{ analysis.signals.length }} 条
         </span>
@@ -376,7 +379,7 @@ function sideColor(side: string) {
         <div class="seg">
           <button type="button" :class="{ on: !confluenceOnly }" @click="confluenceOnly = false">全部</button>
           <button type="button" :class="{ on: confluenceOnly }" @click="confluenceOnly = true"
-                  title="只显示前 1 根高周期K线内出现同向高周期缠论信号的信号（级别共振）">只看共振</button>
+                  title="只显示前 1 根高级别K线内出现同向高级别缠论买卖点的信号（级别共振）">只看共振</button>
         </div>
       </div>
 

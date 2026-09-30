@@ -33,7 +33,7 @@ const symbolOptions = computed(() =>
 )
 
 /**
- * 可信度徽章（仅缠论信号有）：同语境（类别 × 周期）台账经验表现；
+ * 证据强度徽章（仅缠论买卖点有）：同语境（类别 × 周期）台账经验表现；
  * 口径与查看页一致——不给未校准的"置信度"，波次不足时明说"样本不足"。
  */
 function credText(sig: WatchlistSignalView): string {
@@ -58,7 +58,7 @@ function rowTitle(sig: WatchlistSignalView): string {
 
 function credTitle(sig: WatchlistSignalView): string {
   const b = sig.credibility
-  if (!b) return sig.source === '缠论' ? '该语境暂无已评估样本' : '可信度仅对缠论结构定义，指标信号不评级'
+  if (!b) return sig.source === '缠论' ? '该语境暂无已评估样本' : '证据强度仅对缠论买卖点定义，指标状态不评级'
   const pct = (v: number) => `${Math.round(v * 100)}%`
   return [
     `同语境历史表现（缠论 ${sig.kind ?? ''} · ${sig.interval}）`,
@@ -233,7 +233,7 @@ onBeforeUnmount(() => {
       <section class="pane stream-pane">
         <h3 class="pane-title">信号流（监控列表内 · 已确认） <i>{{ signals.length }}</i></h3>
         <div class="stream-row hd">
-          <span>时间</span><span>标的</span><span>周期</span><span>类型</span><span>方向</span><span>可信度</span>
+          <span>时间</span><span>标的</span><span>周期</span><span>类型</span><span>方向</span><span>证据强度</span>
         </div>
         <div
           v-for="s in signals"

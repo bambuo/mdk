@@ -61,7 +61,7 @@ const intervals = ['15m', '30m', '1h', '4h', '1d', '1w']
  */
 const primaryItems: { key: keyof Toggles; label: string }[] = [
   { key: 'chan', label: '缠论结构' },
-  { key: 'signals', label: '买卖信号' },
+  { key: 'signals', label: '缠论买卖点' },
 ]
 
 const secondaryItems: { key: keyof Toggles; label: string }[] = [
