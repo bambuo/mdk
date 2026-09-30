@@ -210,7 +210,8 @@ public static class AnalysisEngine
             ["ema50"] = ToNullable(ema50),
             ["ema200"] = ToNullable(ema200),
             ["rsi14"] = ToNullable(rsi),
-            ["atr14"] = ToNullable(atr),
+            // atr14 不回传：前端零引用（ATR 已通过 regime.atrPct 提供）；500 根窗口下白占约 4KB/次
+            // （2026-09-30 审查，见 PLAN §0.20。曾因并发编辑被还原，此处重新应用）
             ["bollUpper"] = ToNullable(boll.Upper),
             ["bollMiddle"] = ToNullable(boll.Middle),
             ["bollLower"] = ToNullable(boll.Lower),
