@@ -11,6 +11,7 @@ public sealed class AnalysisService(
     IOptions<Chan.ChanOptions> chanOptions,
     IOptions<PriceLevelOptions> levelOptions,
     VolumeProfileService profileService,
+    LiquidationRecorder liquidations,
     SignalStore store)
 {
     private static readonly TimeSpan HtfCacheTtl = TimeSpan.FromSeconds(60);
@@ -156,6 +157,8 @@ public sealed class AnalysisService(
 
         decimal? funding = null, mark = null, basis = null, openInterest = null, oiChange = null;
         long? nextFunding = null;
+        int? liquidationCount = null;
+        decimal? liquidationNotional = null, longLiquidatedShare = null;
         if (market == MarketKind.Futures)
         {
             var cached = await GetFuturesLeverageCachedAsync(pair, ct);
@@ -163,9 +166,19 @@ public sealed class AnalysisService(
             {
                 (funding, nextFunding, mark, basis, openInterest, oiChange) = value;
             }
+
+            // 强平数据是我们自己采集的（只覆盖监控列表、且受"每秒一笔"抽样限制），故为空时也如实留空
+            var summary = liquidations.Summary(pair.Symbol, hours: 24);
+            if (!summary.IsEmpty)
+            {
+                liquidationCount = summary.Count;
+                liquidationNotional = decimal.Round(summary.TotalNotional, 0);
+                longLiquidatedShare = summary.LongLiquidatedShare;
+            }
         }
 
-        return new LeverageFacts(funding, nextFunding, openInterest, oiChange, mark, basis, taker, bars);
+        return new LeverageFacts(funding, nextFunding, openInterest, oiChange, mark, basis, taker, bars,
+            liquidationCount, liquidationNotional, longLiquidatedShare);
     }
 
     /// <summary>合约侧事实（费率/标记价/持仓量）60s 缓存；失败不缓存，下次请求重试。</summary>

@@ -277,6 +277,12 @@ export interface LeverageFacts {
   takerBuyShare: number | null
   /** 主动买占比所用的K线根数 */
   takerBars: number
+  /** 近 24h 采集到的强平笔数（币安只推每秒每标的最大一笔，系统性少于真实清算量） */
+  liquidationCount?: number | null
+  /** 近 24h 强平名义额（计价币） */
+  liquidationNotional?: number | null
+  /** 多头被强平占比（0~1，>0.5 表示以多头挨打为主） */
+  longLiquidatedShare?: number | null
 }
 
 /** 图表指标显示开关 */

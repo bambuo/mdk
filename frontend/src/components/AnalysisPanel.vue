@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, ref } from 'vue'
 import type { AnalysisResult, EvidenceBucket, PriceLevel, SignalStatsResponse, TradeSignal } from '../types'
-import { formatPct, formatPrice, formatTime, formatTimeFull } from '../utils'
+import { formatPct, formatPrice, formatTime, formatTimeFull, formatVolume } from '../utils'
 
 const props = defineProps<{
   analysis: AnalysisResult | null
@@ -87,6 +87,10 @@ const leverageFacts = computed<string[]>(() => {
     parts.push(`持仓 ${formatPrice(l.openInterest)}${change}`)
   }
   if (l.takerBuyShare != null) parts.push(`主动买 ${(l.takerBuyShare * 100).toFixed(0)}%`)
+  if (l.liquidationNotional != null && l.liquidationNotional > 0) {
+    const share = l.longLiquidatedShare != null ? `（多头被清 ${(l.longLiquidatedShare * 100).toFixed(0)}%）` : ''
+    parts.push(`清算 24h $${formatVolume(l.liquidationNotional)}${share}`)
+  }
   return parts
 })
 

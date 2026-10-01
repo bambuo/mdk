@@ -27,7 +27,13 @@ public sealed record LeverageFacts(
     decimal? BasisPct,
     decimal? TakerBuyShare,
     /// <summary>主动买占比所用的K线根数。</summary>
-    int TakerBars);
+    int TakerBars,
+    /// <summary>近 24h 采集到的强平笔数（币安只推每秒每标的最大一笔，故**系统性少于真实清算量**）。</summary>
+    int? LiquidationCount = null,
+    /// <summary>近 24h 强平名义额（计价币计；同样受上述抽样限制）。</summary>
+    decimal? LiquidationNotional = null,
+    /// <summary>多头被强平占比（0~1）：&gt;0.5 表示这段时间以多头挨打为主。</summary>
+    decimal? LongLiquidatedShare = null);
 
 /// <summary>杠杆面事实的纯计算（可独立测试）。</summary>
 public static class LeverageMath

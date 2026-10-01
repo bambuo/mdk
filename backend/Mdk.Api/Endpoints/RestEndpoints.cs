@@ -111,6 +111,26 @@ internal static class RestEndpoints
             })
             .WithSummary("缠论结构 + 买卖点信号 + 指标序列（纯缠论）");
 
+        app.MapGet("/api/liquidations", (LiquidationRecorder recorder, string? symbol, int? hours) =>
+            {
+                if (string.IsNullOrWhiteSpace(symbol)) return BadRequest("请指定标的 symbol");
+                var take = Math.Clamp(hours ?? 24, 1, 24 * 30);
+                var summary = recorder.Summary(symbol.Trim().ToUpperInvariant(), take);
+                return Results.Ok(new
+                {
+                    symbol = symbol.Trim().ToUpperInvariant(),
+                    hours = take,
+                    count = summary.Count,
+                    buyNotional = summary.BuyNotional,
+                    sellNotional = summary.SellNotional,
+                    totalNotional = summary.TotalNotional,
+                    longLiquidatedShare = summary.LongLiquidatedShare,
+                    maxSingleNotional = summary.MaxSingleNotional,
+                    note = "币安只推每秒每标的最大一笔快照，且只采集监控列表内标的：量级系统性偏低，仅供相对比较",
+                });
+            })
+            .WithSummary("强平（清算）汇总：近 N 小时采集到的清算笔数与名义额");
+
         app.MapPost("/api/backfill/run", (
                 string? market, int? days, string? symbols, string? intervals, bool? subLevel, string? until,
                 SignalBackfillService backfill) =>

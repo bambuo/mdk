@@ -30,6 +30,12 @@ builder.Services.AddHttpClient<BinanceRestClient>(client => client.Timeout = Tim
     });
 builder.Services.AddSingleton<SymbolCatalog>();
 builder.Services.AddSingleton<KlineStreamService>();
+// 强平（清算）快照采集：币安已下架历史打包，历史只能从订阅起积累；只记录监控列表内标的
+builder.Services.AddSingleton(sp => new LiquidationStore(
+    Path.Combine(sp.GetRequiredService<IHostEnvironment>().ContentRootPath, "data"),
+    sp.GetRequiredService<ILogger<LiquidationStore>>()));
+builder.Services.AddSingleton<LiquidationRecorder>();
+builder.Services.AddHostedService(sp => sp.GetRequiredService<LiquidationRecorder>());
 // 成交量分布：后台构建 + 内存缓存（按 UTC 日失效），分析请求只读缓存不阻塞
 builder.Services.AddSingleton<VolumeProfileService>();
 builder.Services.AddHostedService(sp => sp.GetRequiredService<VolumeProfileService>());
