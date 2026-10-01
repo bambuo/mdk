@@ -2,11 +2,16 @@ using Mdk.Api.Domain;
 
 namespace Mdk.Tests;
 
-/// <summary>测试入口：dotnet run --project backend/Mdk.Tests。退出码 0 = 全部通过。</summary>
+/// <summary>
+/// 入口：无参数 = 跑自带测试（exit 0 全绿）；`levels-study ...` = 跑位点守住/跌破检验（研究用，见 LevelsStudyCommand）。
+/// </summary>
 public static class Program
 {
-    public static int Main()
+    public static int Main(string[] args)
     {
+        if (args.Length > 0 && args[0] == "levels-study")
+            return LevelsStudyCommand.RunAsync(args).GetAwaiter().GetResult();
+
         Console.WriteLine("MDK 自带测试（零外部依赖）");
         Console.WriteLine();
 

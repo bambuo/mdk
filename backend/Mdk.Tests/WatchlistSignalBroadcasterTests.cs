@@ -24,8 +24,9 @@ public static class WatchlistSignalBroadcasterTests
             env.Signals.TryRecord(Entry("BTCUSDT", kind: "3买", origin: "live", confirmed: true));
 
             Assert.Equal(true, reader.TryRead(out var payload));
+            Assert.True(payload is not null, "推送载荷不应为空");
             // 中文会被 JSON 转义（\u4E70），因此解析后按字段断言
-            using var doc = System.Text.Json.JsonDocument.Parse(payload);
+            using var doc = System.Text.Json.JsonDocument.Parse(payload!);
             var root = doc.RootElement;
             Assert.Equal("BTCUSDT", root.GetProperty("symbol").GetString());
             Assert.Equal("3买", root.GetProperty("kind").GetString());
