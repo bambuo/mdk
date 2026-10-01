@@ -286,6 +286,9 @@ const displayChangePct = computed(() => {
   white-space: nowrap;
   border: 1px solid #2c313a;
   color: #9aa3b0;
+  /* 定宽到较宽的那一个（U本位永续 ≈ 10.1ch）：切市场时标签与右侧整排都不跳 */
+  min-width: 10.5ch;
+  text-align: center;
 }
 
 .market-tag.futures {
@@ -298,6 +301,10 @@ const displayChangePct = computed(() => {
   font-variant-numeric: tabular-nums;
   font-weight: 600;
   white-space: nowrap;
+  /* 定宽 + 右对齐：价格与涨跌幅位数变化时宽度恒定，不再推挤左侧的「现货/U本位永续」与右侧按钮。
+     18ch 覆盖最坏情形（如 0.00001234 (+12.34%)），更长的价在此宽度内也不会换行（nowrap） */
+  width: 18ch;
+  text-align: right;
 }
 
 .symbol-meta.up {
@@ -312,6 +319,10 @@ const displayChangePct = computed(() => {
   color: #6b7280;
   font-size: 12px;
   white-space: nowrap;
+  /* 定宽：24h 额从 987.6M 变 1.23B 时宽度恒定 */
+  width: 13ch;
+  text-align: right;
+  font-variant-numeric: tabular-nums;
 }
 
 .status {
