@@ -1,0 +1,118 @@
+{
+  "generatedAt": 1790845363,
+  "window": {
+    "from": "2025-01-01",
+    "to": "2026-01-01"
+  },
+  "symbols": [
+    "BTCUSDT",
+    "ETHUSDT",
+    "SOLUSDT",
+    "BNBUSDT"
+  ],
+  "intervals": [
+    "1h",
+    "4h"
+  ],
+  "criteria": {
+    "minEdge": 0.10,
+    "minEpisodes": 100,
+    "maxTopSymbolShare": 0.50,
+    "bounceAtr": 1,
+    "breakAtr": 0.5,
+    "touchWindow": 200,
+    "holdWindow": 60
+  },
+  "topSymbolShare": 0.2501,
+  "stratifiedEdge": -0.0088,
+  "buckets": 4,
+  "positiveBuckets": 1,
+  "coverage": 0.9653,
+  "passed": false,
+  "reasons": [
+    "\u8DDD\u79BB\u5206\u5C42\u540E\u7684\u4F18\u52BF -0.9% \u003C \u5224\u636E 10%\uFF08\u8986\u76D6 97% \u771F\u5B9E\u6CE2\u6B21\u30014 \u4E2A\u6863\u4F4D\uFF09",
+    "\u4F18\u52BF\u4E3A\u6B63\u7684\u6863\u4F4D 1/4 \u4E0D\u8DB3\u4E09\u5206\u4E4B\u4E8C\uFF08\u65B9\u5411\u4E0D\u7A33\u5B9A\uFF09"
+  ],
+  "groups": [
+    {
+      "label": "\u5168\u90E8\u4F4D\u70B9",
+      "events": 62117,
+      "episodes": 2563,
+      "held": 1676,
+      "broke": 811,
+      "rate": 0.6739,
+      "low": 0.6552241007076951803226838291,
+      "high": 0.6920480823167091013466122033
+    },
+    {
+      "label": "\u652F\u6491",
+      "events": 31186,
+      "episodes": 1283,
+      "held": 834,
+      "broke": 407,
+      "rate": 0.6720,
+      "low": 0.6454223679730346848999436248,
+      "high": 0.6975931610709818389694386324
+    },
+    {
+      "label": "\u963B\u529B",
+      "events": 30931,
+      "episodes": 1280,
+      "held": 842,
+      "broke": 404,
+      "rate": 0.6758,
+      "low": 0.6492653920932569586578635555,
+      "high": 0.7011790162221647715837926671
+    },
+    {
+      "label": "\u4EC5\u6446\u52A8\u70B9",
+      "events": 35477,
+      "episodes": 2490,
+      "held": 1686,
+      "broke": 594,
+      "rate": 0.7395,
+      "low": 0.7210648003898080190536100834,
+      "high": 0.7570769411390265551130046238
+    },
+    {
+      "label": "\u542B\u5BA2\u89C2\u951A\u70B9",
+      "events": 26640,
+      "episodes": 2518,
+      "held": 1671,
+      "broke": 685,
+      "rate": 0.7093,
+      "low": 0.6905871610181247451457601984,
+      "high": 0.7272374929756009354253425400
+    },
+    {
+      "label": "\u5F3A\u5EA6\u5206 \u2265 2",
+      "events": 49794,
+      "episodes": 2535,
+      "held": 1716,
+      "broke": 704,
+      "rate": 0.7091,
+      "low": 0.6906750170327782511598010543,
+      "high": 0.7268440155640713119469630183
+    },
+    {
+      "label": "\u5F3A\u5EA6\u5206 \u003C 2",
+      "events": 12323,
+      "episodes": 2083,
+      "held": 1386,
+      "broke": 504,
+      "rate": 0.7333,
+      "low": 0.7129376115242385501427116118,
+      "high": 0.7527824360235605899754482174
+    }
+  ],
+  "control": {
+    "label": "\u5BF9\u7167\uFF08\u540C\u8DDD\u79BB\u975E\u4F4D\u70B9\uFF09",
+    "events": 59580,
+    "episodes": 2563,
+    "held": 1787,
+    "broke": 620,
+    "rate": 0.7424,
+    "low": 0.7245710258720127424119676886,
+    "high": 0.7594922987362900179186985816
+  }
+}

@@ -74,6 +74,10 @@ public static class LevelsStudyCommand
                 holdWindow = options.HoldWindow,
             },
             topSymbolShare = result.TopSymbolShare,
+            stratifiedEdge = result.StratifiedEdge,
+            buckets = result.Buckets,
+            positiveBuckets = result.PositiveBuckets,
+            coverage = result.Coverage,
             passed = result.Passed,
             reasons = result.Reasons,
             groups = result.Groups.Select(g => new
@@ -106,8 +110,10 @@ public static class LevelsStudyCommand
         var c = result.Control;
         Console.WriteLine($"  {c.Label,-22} {c.Events,6} {c.Episodes,6} {c.Held,6} {c.Broke,6}   {c.Rate,6:P1}   [{c.Low:P1}, {c.High:P1}]");
         Console.WriteLine();
+        Console.WriteLine($"距离分层优势：{result.StratifiedEdge:P1}"
+            + $"（{result.Buckets} 个档位，其中 {result.PositiveBuckets} 个为正；覆盖 {result.Coverage:P0} 真实波次）");
         Console.WriteLine($"单一标的占比：{result.TopSymbolShare:P0}");
-        Console.WriteLine($"判据：优势 ≥ {options.MinEdge:P0} · 波次 ≥ {options.MinEpisodes} · 单标的占比 ≤ {options.MaxTopSymbolShare:P0}");
+        Console.WriteLine($"判据：分层优势 ≥ {options.MinEdge:P0} · 为正档位 ≥ 2/3 · 波次 ≥ {options.MinEpisodes} · 单标的占比 ≤ {options.MaxTopSymbolShare:P0}");
         Console.WriteLine(result.Passed
             ? "结论：通过（位点的位置比同距离的任意价位更常挡住价格）"
             : "结论：未通过 —— " + string.Join("；", result.Reasons));

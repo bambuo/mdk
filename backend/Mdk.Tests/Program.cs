@@ -24,6 +24,7 @@ public static class Program
         PriceLevelTests.Register(kit);
         LeverageTests.Register(kit);
         VolumeProfileTests.Register(kit);
+        LevelHoldStudyTests.Register(kit);
         ConfigGuardTests.Register(kit);
         LocalSettingsTests.Register(kit);
         AttentionTests.Register(kit);

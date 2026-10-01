@@ -607,6 +607,10 @@ function sideColor(side: string) {
         关键点位
         <span class="card-sub">点击在图上定位</span>
         <span v-if="levelsBasisNote" class="card-sub">{{ levelsBasisNote }}</span>
+        <!-- 已否证：位点不承载"能否挡住价格"的信息（预注册检验，见 PLAN §0.34）——界面不得暗示优势 -->
+        <span class="card-sub" title="预注册检验：把位点与同距离的非位点价位对照，按距离分层比较——优势 -0.9%（判据要求 ≥ +10%）。位点只作风险锚与画线参考。">
+          仅作风险锚
+        </span>
       </h3>
       <div class="level-group">
         <div class="level-caption resistance">阻力</div>

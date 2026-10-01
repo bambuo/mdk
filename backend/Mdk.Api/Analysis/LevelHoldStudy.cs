@@ -62,6 +62,8 @@ public sealed record LevelHoldEvent(
     long Time,
     decimal LevelPrice,
     decimal Close,
+    /// <summary>该价与现价的距离（ATR 倍数）：用于核对"真实与对照的距离分布是否相当"。</summary>
+    decimal DistanceAtr,
     string Outcome,
     int BarsToOutcome);
 
@@ -83,7 +85,16 @@ public sealed record LevelHoldGroup(
 
 public sealed record LevelHoldStudyResult(
     IReadOnlyList<LevelHoldGroup> Groups,
+    /// <summary>对照（同一距离带内的非位点价位）。</summary>
     LevelHoldGroup Control,
+    /// <summary>距离分层优势：同档位内（真实守住率 − 对照守住率），按真实波次加权。</summary>
+    decimal StratifiedEdge,
+    /// <summary>参与比较的距离档位数。</summary>
+    int Buckets,
+    /// <summary>优势为正的档位数（方向稳定性）。</summary>
+    int PositiveBuckets,
+    /// <summary>被档位覆盖的真实波次占比。</summary>
+    decimal Coverage,
     decimal TopSymbolShare,
     bool Passed,
     IReadOnlyList<string> Reasons);
@@ -121,14 +132,15 @@ public static class LevelHoldStudy
 
                 var real = Evaluate(candles, atr, t, level.Price, side, options);
                 events.Add(new LevelHoldEvent(symbol, interval, side, false, SourceOf(level), level.Score,
-                    candles[t].Time, level.Price, close, real.Outcome, real.Bars));
+                    candles[t].Time, level.Price, close, Math.Round(distance / unit, 3), real.Outcome, real.Bars));
 
-                // 对照：同一距离、同一侧，但价格**不是**位点；若恰好落在另一位点附近则跳过（避免对照被污染）
-                var placebo = side == "support" ? close - distance : close + distance;
-                if (placebo <= 0 || levels.Any(l => Math.Abs(l.Price - placebo) <= options.TouchTolAtr * unit)) continue;
-                var control = Evaluate(candles, atr, t, placebo, side, options);
+                // 对照：同侧、相近距离，但价格**不是**位点（位点密集，故按确定性偏移序列找第一个可用价位）
+                var placebo = FindPlacebo(levels, close, distance, side, unit, options);
+                if (placebo is not { } placeboPrice) continue;
+                var control = Evaluate(candles, atr, t, placeboPrice, side, options);
                 events.Add(new LevelHoldEvent(symbol, interval, side, true, "对照", 0m,
-                    candles[t].Time, placebo, close, control.Outcome, control.Bars));
+                    candles[t].Time, placeboPrice, close,
+                    Math.Round(Math.Abs(placeboPrice - close) / unit, 3), control.Outcome, control.Bars));
             }
         }
 
@@ -145,6 +157,7 @@ public static class LevelHoldStudy
         var control = events.Where(e => e.IsControl).ToList();
 
         var controlGroup = Group("对照（同距离非位点）", control, options, barSeconds);
+        var (edge, buckets, positiveBuckets, coverage) = StratifiedEdge(real, control, options, barSeconds);
         var groups = new List<LevelHoldGroup>
         {
             Group("全部位点", real, options, barSeconds),
@@ -159,17 +172,53 @@ public static class LevelHoldStudy
         var all = groups[0];
         var topSymbolShare = TopSymbolShare(real, options, barSeconds);
         var reasons = new List<string>();
-        var edge = all.Rate - controlGroup.Rate;
-        if (edge < options.MinEdge)
-            reasons.Add($"真实位点守住率 {all.Rate:P1} 相对对照 {controlGroup.Rate:P1} 的优势 {edge:P1} < 判据 {options.MinEdge:P0}");
-        if (all.Low <= controlGroup.Rate)
-            reasons.Add($"真实位点守住率的 95% 区间下界 {all.Low:P1} 未超过对照点估计 {controlGroup.Rate:P1}");
+        if (buckets == 0)
+            reasons.Add("距离分层后没有两组成对都够量的档位：对照与真实的距离分布不重叠，无法比较");
+        else
+        {
+            if (edge < options.MinEdge)
+                reasons.Add($"距离分层后的优势 {edge:P1} < 判据 {options.MinEdge:P0}（覆盖 {coverage:P0} 真实波次、{buckets} 个档位）");
+            if (positiveBuckets * 3 < buckets * 2)
+                reasons.Add($"优势为正的档位 {positiveBuckets}/{buckets} 不足三分之二（方向不稳定）");
+        }
+
         if (all.Episodes < options.MinEpisodes)
             reasons.Add($"独立波次 {all.Episodes} < 判据 {options.MinEpisodes}");
         if (topSymbolShare > options.MaxTopSymbolShare)
             reasons.Add($"单一标的占比 {topSymbolShare:P0} > 判据 {options.MaxTopSymbolShare:P0}");
 
-        return new LevelHoldStudyResult(groups, controlGroup, topSymbolShare, reasons.Count == 0, reasons);
+        return new LevelHoldStudyResult(
+            groups,
+            controlGroup,
+            edge,
+            buckets,
+            positiveBuckets,
+            coverage,
+            topSymbolShare,
+            reasons.Count == 0,
+            reasons);
+    }
+
+    /// <summary>
+    /// 找一个"非位点"的对照价：同侧、距离在真位点附近（±0.35/0.7/1.05×ATR 依次尝试，确定性可复现），
+    /// 且与任何位点的距离都超过触碰容差（否则对照会被位点本身污染）。
+    /// 找不到就不配对——对照组因此偏向位点之间的空隙，这是保守方向（对照更难被"守住"），如实记录。
+    /// </summary>
+    private static decimal? FindPlacebo(
+        IReadOnlyList<PriceLevel> levels, decimal close, decimal distance, string side, decimal unit, LevelHoldStudyOptions options)
+    {
+        decimal[] offsets = [0.35m, -0.35m, 0.7m, -0.7m, 1.05m, -1.05m];
+        foreach (var offset in offsets)
+        {
+            var candidate = distance + offset * unit;
+            if (candidate < 0.1m * unit || candidate > options.WatchAtr * unit) continue;
+            var price = side == "support" ? close - candidate : close + candidate;
+            if (price <= 0) continue;
+            if (levels.Any(l => Math.Abs(l.Price - price) <= options.TouchTolAtr * unit)) continue;
+            return price;
+        }
+
+        return null;
     }
 
     private static (string Outcome, int Bars) Evaluate(
@@ -211,10 +260,57 @@ public static class LevelHoldStudy
         return ("pending", 0);
     }
 
-    /// <summary>按独立波次汇总：同标的同周期同方向、间隔 ≤ EpisodeGapBars 根的事件算同一波，取首个代表。</summary>
-    private static LevelHoldGroup Group(
-        string label, IReadOnlyList<LevelHoldEvent> events, LevelHoldStudyOptions options,
+    /// <summary>
+    /// 距离分层比较：把事件按距离分档（0.5×ATR 一档），在**同一档内**比较真实位点与对照的守住率，
+    /// 再按真实事件的波次数加权平均。
+    ///
+    /// 为什么必须分层：对照价必须避开位点本身（否则对照就是位点），同侧最小偏移 0.35×ATR，
+    /// 于是对照的距离分布系统性偏大（第一次有效运行：1.71 vs 1.52×ATR）——不分层就会把
+    /// "谁更容易被守住"的结论建立在几何差异上。分档内比较即消除该偏差。
+    /// </summary>
+    private static (decimal Edge, int Buckets, int PositiveBuckets, decimal Coverage) StratifiedEdge(
+        IReadOnlyList<LevelHoldEvent> real,
+        IReadOnlyList<LevelHoldEvent> control,
+        LevelHoldStudyOptions options,
         IReadOnlyDictionary<string, long> barSeconds)
+    {
+        const decimal width = 0.5m;      // 档宽（ATR 倍数）
+        const int minEpisodes = 20;      // 单档每组至少这么多波次才纳入
+        var repReal = Representatives(real, options, barSeconds);
+        var repControl = Representatives(control, options, barSeconds);
+
+        decimal weighted = 0m;
+        var weightSum = 0;
+        var buckets = 0;
+        var positive = 0;
+        for (var low = 0m; low < options.WatchAtr; low += width)
+        {
+            var high = low + width;
+            var realBucket = repReal.Where(e => e.DistanceAtr >= low && e.DistanceAtr < high).ToList();
+            var controlBucket = repControl.Where(e => e.DistanceAtr >= low && e.DistanceAtr < high).ToList();
+            var realDecided = realBucket.Count(e => e.Outcome is "held" or "broke");
+            var controlDecided = controlBucket.Count(e => e.Outcome is "held" or "broke");
+            if (realDecided < minEpisodes || controlDecided < minEpisodes) continue;
+
+            var realRate = (decimal)realBucket.Count(e => e.Outcome == "held") / realDecided;
+            var controlRate = (decimal)controlBucket.Count(e => e.Outcome == "held") / controlDecided;
+            var diff = realRate - controlRate;
+            weighted += diff * realDecided;
+            weightSum += realDecided;
+            buckets++;
+            if (diff > 0) positive++;
+        }
+
+        var coverage = repReal.Count == 0 ? 0m : Math.Round((decimal)weightSum / repReal.Count, 4);
+        return (weightSum == 0 ? 0m : Math.Round(weighted / weightSum, 4), buckets, positive, coverage);
+    }
+
+    /// <summary>
+    /// 独立波次代表：同标的同周期同方向、间隔 ≤ EpisodeGapBars 根的事件算同一波，取首个作为代表。
+    /// （信号时间聚集会虚高显著性，因此比例一律按波次算——与台账口径一致。）
+    /// </summary>
+    private static List<LevelHoldEvent> Representatives(
+        IEnumerable<LevelHoldEvent> events, LevelHoldStudyOptions options, IReadOnlyDictionary<string, long> barSeconds)
     {
         var representatives = new List<LevelHoldEvent>();
         foreach (var series in events.GroupBy(e => (e.Symbol, e.Interval, e.Side)))
@@ -222,15 +318,25 @@ public static class LevelHoldStudy
             var gap = barSeconds.TryGetValue(series.Key.Interval, out var seconds)
                 ? seconds * options.EpisodeGapBars
                 : 0;
-            long lastTime = long.MinValue;
+            var hasLast = false;
+            var lastTime = 0L;
             foreach (var e in series.OrderBy(e => e.Time))
             {
-                if (gap > 0 && e.Time - lastTime <= gap) continue;
+                if (hasLast && gap > 0 && e.Time - lastTime <= gap) continue;
                 representatives.Add(e);
                 lastTime = e.Time;
+                hasLast = true;
             }
         }
 
+        return representatives;
+    }
+
+    private static LevelHoldGroup Group(
+        string label, IReadOnlyList<LevelHoldEvent> events, LevelHoldStudyOptions options,
+        IReadOnlyDictionary<string, long> barSeconds)
+    {
+        var representatives = Representatives(events, options, barSeconds);
         var held = representatives.Count(e => e.Outcome == "held");
         var broke = representatives.Count(e => e.Outcome == "broke");
         var decided = held + broke;
@@ -246,26 +352,14 @@ public static class LevelHoldStudy
         IReadOnlyList<LevelHoldEvent> events, LevelHoldStudyOptions options, IReadOnlyDictionary<string, long> barSeconds)
     {
         if (events.Count == 0) return 0m;
-        var bySymbol = events.GroupBy(e => (e.Symbol, e.Interval, e.Side));
-        var counts = new Dictionary<string, int>(StringComparer.Ordinal);
-        var total = 0;
-        foreach (var series in bySymbol)
-        {
-            var gap = barSeconds.TryGetValue(series.Key.Interval, out var seconds)
-                ? seconds * options.EpisodeGapBars
-                : 0;
-            long lastTime = long.MinValue;
-            foreach (var e in series.OrderBy(e => e.Time))
-            {
-                if (gap > 0 && e.Time - lastTime <= gap) continue;
-                lastTime = e.Time;
-                counts[e.Symbol] = counts.GetValueOrDefault(e.Symbol) + 1;
-                total++;
-            }
-        }
-
-        return total == 0 ? 0m : Math.Round((decimal)counts.Values.Max() / total, 4);
+        var representatives = Representatives(events, options, barSeconds);
+        if (representatives.Count == 0) return 0m;
+        var counts = representatives.GroupBy(e => e.Symbol).ToDictionary(g => g.Key, g => g.Count());
+        return Math.Round((decimal)counts.Values.Max() / representatives.Count, 4);
     }
+
+    private static decimal Mean(IReadOnlyList<LevelHoldEvent> events, Func<LevelHoldEvent, decimal> select) =>
+        events.Count == 0 ? 0m : Math.Round(events.Average(select), 3);
 
     private static string SourceOf(PriceLevel level) =>
         level.Sources.Any(s => s != "摆动点") ? string.Join('/', level.Sources.Where(s => s != "摆动点")) : "摆动点";
