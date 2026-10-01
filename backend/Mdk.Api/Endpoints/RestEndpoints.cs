@@ -18,7 +18,8 @@ internal static class PairResolver
         if (!TradingPair.TryParse(raw, out var parsed))
             return (marketKind, null, $"无法识别的交易对 “{raw}”（格式如 BTCUSDT）");
         var canonical = await catalog.ResolveAsync(marketKind, parsed.Symbol, ct);
-        return canonical is null
+        // 同时判 null 与 IsEmpty：TradingPair 是结构体，未命中查找会得到非 null 的空结构
+        return canonical is null || canonical.Value.IsEmpty
             ? (marketKind, null, $"币安{MarketName(marketKind)}不存在可交易的交易对 {parsed.Display}")
             : (marketKind, canonical, null);
     }

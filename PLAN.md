@@ -906,6 +906,36 @@ vue-tsc + 构建通过。
 自带测试 **152/152**（新增飞书 8 例）；构建 0 警告 0 错误；未配置时实测：启动日志明确提示且不发请求、
 自检端点返回清晰指引、端点调用不产生额外实例。**待用户填入真实 WebhookUrl 后即可端到端验证。**
 
+## 0.31 结构体值对象的"空值陷阱"（2026-10-01，用户报错触发）
+用户贴出运行日志：`币安请求失败 Spot 400: {"code":-1105,"msg":"Parameter 'symbol' was empty."}`，
+且 WS 日志显示 `analysis 重算失败: / 1h`（交易对为空）。
+
+### 根因（结构体值对象的经典陷阱）
+`SymbolCatalog.ResolveAsync` 用 `Dictionary<string, TradingPair>.GetValueOrDefault(key)` 查找交易对。
+`TradingPair` 是**结构体**值对象，字典未命中时返回的是 **`default(TradingPair)`——非 null 的空结构**，
+于是 `PairResolver` 的 `canonical is null` 检查形同虚设：空交易对被当成有效值一路传到币安，
+币安回一句 `symbol was empty`，掩盖了真正的问题（交易对不存在）。
+实测：`GET /api/analysis?symbol=FOOUSDT` 修复前返回币安 400，修复后返回本地清晰错误。
+
+### 三层修复（根因 + 边界 + 不变量）
+1. **根因**：`SymbolCatalog.Lookup`（新抽出、public、可测）改用 `TryGetValue`，未命中返回 **null**；
+   `ResolveAsync` 委托给它，不再用 `GetValueOrDefault`。
+2. **边界防线**：`BinanceRestClient.GetKlinesAsync` 在发请求前检查 `pair.IsEmpty`，
+   直接抛 `ArgumentException`（本地清晰错误，不再向上游发空 symbol）。
+3. **不变量**：`TradingPair.IsEmpty`（`BaseAsset`/`QuoteAsset` 任一为空）并写明"结构体 default 即空值、
+   只判 null 不够"；`PairResolver` 同时判 `null || IsEmpty`（纵深防御）。
+
+### 回归用例（`Mdk.Tests/TradingPairEmptyTests.cs`）
+- `default(TradingPair).IsEmpty == true`、正常解析为 false；
+- `SymbolCatalog.Lookup` 未命中返回 **null**（而非 default 结构）、大小写/空白归一后能命中；
+- 空交易对调 `GetKlinesAsync` 抛 `ArgumentException`（不会发请求）。
+
+同时补登记：配置守卫新增 `Feishu` 节（上一提交加飞书配置时漏登记，守卫正确地拦下了测试）。
+
+### 验证
+自带测试 **155/155**；构建 0 警告 0 错误；重启实测：不存在交易对返回本地清晰错误、
+正常交易对正常、空 symbol 的 WS 请求仍 400。
+
 ## 1. 目录结构（全新项目 /Users/johana/Desktop/mdk）
 ```
 mdk/

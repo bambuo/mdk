@@ -58,6 +58,10 @@ public sealed class BinanceRestClient(
     public async Task<Candle[]> GetKlinesAsync(MarketKind market, TradingPair pair, string interval, int limit,
         CancellationToken ct = default)
     {
+        // 边界防线：空交易对（default(TradingPair)）不得发出请求——否则币安只会回一句
+        // "Parameter 'symbol' was empty."，掩盖真正的问题（交易对解析失败）
+        if (pair.IsEmpty)
+            throw new ArgumentException($"交易对为空（{pair.Symbol}）：应先经交易对解析并校验 IsEmpty", nameof(pair));
         var url = $"{market.ToRestPath()}/klines?symbol={pair.Symbol}&interval={interval}&limit={limit}";
         using var response = await SendAsync(market, url, ct);
         var rows = await response.Content.ReadFromJsonAsync<JsonElement[][]>(cancellationToken: ct)
@@ -258,6 +262,17 @@ public sealed class SymbolCatalog(BinanceRestClient rest)
     public async Task<TradingPair?> ResolveAsync(MarketKind market, string raw, CancellationToken ct = default)
     {
         var all = await GetAllAsync(market, ct);
-        return all.GetValueOrDefault(raw.Trim().ToUpperInvariant());
+        return Lookup(all, raw);
+    }
+
+    /// <summary>
+    /// 目录查找（纯函数，可测）：未命中返回 **null**。
+    /// 不用 <c>GetValueOrDefault</c>——TradingPair 是结构体，未命中会得到非 null 的空结构，
+    /// 从而绕过调用方的 null 检查、把空 symbol 发给币安（2026-10-01 实际事故）。
+    /// </summary>
+    public static TradingPair? Lookup(Dictionary<string, TradingPair> bySymbol, string raw)
+    {
+        var canonical = raw.Trim().ToUpperInvariant();
+        return bySymbol.TryGetValue(canonical, out var pair) ? pair : null;
     }
 }

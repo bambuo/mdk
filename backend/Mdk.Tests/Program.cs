@@ -20,6 +20,7 @@ public static class Program
         AttentionTests.Register(kit);
         WatchlistSignalBroadcasterTests.Register(kit);
         FeishuNotifierTests.Register(kit);
+        TradingPairEmptyTests.Register(kit);
         WilderSmoothingTests.Register(kit);
         RsiTests.Register(kit);
         AtrTests.Register(kit);

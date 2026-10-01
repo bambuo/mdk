@@ -3,6 +3,7 @@ using System.Text.Json;
 using Mdk.Api.Analysis;
 using Mdk.Api.Analysis.Chan;
 using Mdk.Api.Binance;
+using Mdk.Api.Notify;
 
 namespace Mdk.Tests;
 
@@ -37,6 +38,7 @@ public static class ConfigGuardTests
                 ["Signal"] = typeof(SignalOptions),
                 ["Chan"] = typeof(ChanOptions),
                 ["Backfill"] = typeof(BackfillOptions),
+                ["Feishu"] = typeof(FeishuOptions),
             };
 
             foreach (var section in root.EnumerateObject())

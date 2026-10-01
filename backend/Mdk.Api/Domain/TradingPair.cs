@@ -54,6 +54,14 @@ public readonly record struct TradingPair : IComparable<TradingPair>
     /// <summary>交易币是否为锚定币（见 <see cref="PeggedAssets"/>）：锚定币不构成分析标的。</summary>
     public bool IsPegged => PeggedAssets.IsPegged(BaseAsset);
 
+    /// <summary>
+    /// 是否为空值（<c>default(TradingPair)</c>）。本类型是**结构体**值对象，
+    /// 因此字典查找的 <c>GetValueOrDefault</c>／<c>FirstOrDefault</c> 在未命中时返回的是
+    /// **非 null 的空结构**，而不是 null——调用方若只判 null 会把空交易对当成有效值传给币安
+    /// （表现为 `Parameter 'symbol' was empty.`，2026-10-01 实际发生过）。凡可能未命中的查找都要一并判 <see cref="IsEmpty"/>。
+    /// </summary>
+    public bool IsEmpty => string.IsNullOrEmpty(BaseAsset) || string.IsNullOrEmpty(QuoteAsset);
+
     /// <summary>由拆分后的交易币与计价币构造，两个入参均会做大写与字符合法性归一。</summary>
     public static TradingPair From(string baseAsset, string quoteAsset) =>
         new(Normalize(baseAsset, nameof(baseAsset)), Normalize(quoteAsset, nameof(quoteAsset)));
