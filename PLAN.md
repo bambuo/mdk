@@ -827,6 +827,26 @@ vue-tsc + 构建通过。
 真实推送链路（入库事件 → 过滤 → 广播 → SSE data 行）由 8 例单元测试锁定（144/144）；
 端到端的"真实信号到达"待市场产生新结构时自然发生（监控服务每 120s 分析一轮）。
 
+### 主构造函数基线落地（2026-10-01，用户指出 C#14 基线未执行到位）
+用户指出：语法基线 C#14 已定，但很多可用主构造函数的类没有用。核查：**不是语言限制**（net10.0 即 C#14），
+是多会话交错写作时基线未落到 AGENTS.md、也未强制执行。两类文件三处已转换：
+`BinanceRestClient`、`KlineStreamService`（外层）、其嵌套 `Upstream` 之外的两个纯捕获类……
+实际转换：`BinanceRestClient`、`KlineStreamService` 外层。**保留常规构造**的：
+`SignalStore` / `WatchlistStore`（构造体内有顺序初始化：建目录/开连接/建表/迁移——主构造无语句体）、
+`WatchlistSignalBroadcaster`（构造体内有事件订阅语句，与 Dispose 的退订配对，挪进字段初始化器会损失顺序保证）、
+嵌套 `Upstream`（含 Interlocked 字段与回退后的字段引用，转换收益为零风险为正）。
+
+**教训（必须记录）**：转换 `KlineStreamService` 时曾留下三个**从未赋值的字段声明**
+（`_options/_rest/_logger`，构造函数删除后它们恒为 null），构建时 16 条 CS0649/CS8618 警告其实已经点名，
+但被忽略——运行 30 秒后空闲定时器回调打日志时 `ArgumentNullException: logger` **直接击杀进程**。
+修复（删除残留字段、Subscribe 改传主构造参数）后，空闲释放回调实测执行 3 次不崩。
+
+**流程修正**：本项目后续构建按 **0 警告** 标准（本次 16 条警告即事故前兆）；基线规则已写入 AGENTS.md 架构立场。
+
+### 验证
+自带测试 144/144；构建 0 警告 0 错误；重启实测：WS 正常连接、合约分析 200、
+空闲释放回调执行 3 次（spot:15m / spot:1h / fut:1h）无一崩溃、进程存活。
+
 ## 1. 目录结构（全新项目 /Users/johana/Desktop/mdk）
 ```
 mdk/

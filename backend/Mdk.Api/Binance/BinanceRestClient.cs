@@ -37,11 +37,12 @@ public sealed class BinanceException(int code, string message)
     public int Code { get; } = code;
 }
 
-public sealed class BinanceRestClient
+public sealed class BinanceRestClient(
+    HttpClient http,
+    IOptions<BinanceOptions> options,
+    ILogger<BinanceRestClient> logger)
 {
-    private readonly HttpClient _http;
-    private readonly BinanceOptions _options;
-    private readonly ILogger<BinanceRestClient> _logger;
+    // http / options / logger 由主构造参数承载（捕获即为只读状态），不再声明同名字段
     private readonly Lock _sync = new();
 
     private readonly Dictionary<MarketKind, IReadOnlyList<Ticker24h>> _tickerCache = new();
@@ -49,15 +50,10 @@ public sealed class BinanceRestClient
     private readonly Dictionary<MarketKind, IReadOnlyList<SymbolInfo>> _exchangeInfoCache = new();
     private readonly Dictionary<MarketKind, DateTimeOffset> _exchangeInfoCachedAt = new();
 
-    public BinanceRestClient(HttpClient http, IOptions<BinanceOptions> options, ILogger<BinanceRestClient> logger)
-    {
-        _http = http;
-        _options = options.Value;
-        _logger = logger;
-    }
+
 
     private string RestBaseUrl(MarketKind market) =>
-        market == MarketKind.Futures ? _options.FuturesRestBaseUrl : _options.RestBaseUrl;
+        market == MarketKind.Futures ? options.Value.FuturesRestBaseUrl : options.Value.RestBaseUrl;
 
     /// <summary>拉取K线（币安数组套数组格式 → 归一化 Candle，时间为秒级）。现货与合约响应结构一致。</summary>
     public async Task<Candle[]> GetKlinesAsync(MarketKind market, TradingPair pair, string interval, int limit, CancellationToken ct = default)
@@ -159,7 +155,7 @@ public sealed class BinanceRestClient
             }
             catch (FormatException ex)
             {
-                _logger.LogWarning(ex, "跳过无法解析的交易对 {Symbol}", s.Symbol);
+                logger.LogWarning(ex, "跳过无法解析的交易对 {Symbol}", s.Symbol);
             }
         }
         lock (_sync)
@@ -172,7 +168,7 @@ public sealed class BinanceRestClient
 
     private async Task<HttpResponseMessage> SendAsync(MarketKind market, string path, CancellationToken ct)
     {
-        var response = await _http.GetAsync(RestBaseUrl(market).TrimEnd('/') + path, ct);
+        var response = await http.GetAsync(RestBaseUrl(market).TrimEnd('/') + path, ct);
         if (response.IsSuccessStatusCode) return response;
         string message;
         try
@@ -183,7 +179,7 @@ public sealed class BinanceRestClient
         {
             message = response.ReasonPhrase ?? "请求失败";
         }
-        _logger.LogWarning("币安请求失败 {Market} {Status}: {Body}", market, (int)response.StatusCode, message);
+        logger.LogWarning("币安请求失败 {Market} {Status}: {Body}", market, (int)response.StatusCode, message);
         throw new BinanceException((int)response.StatusCode, message);
     }
 

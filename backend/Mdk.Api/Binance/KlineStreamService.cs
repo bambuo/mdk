@@ -16,20 +16,15 @@ namespace Mdk.Api.Binance;
 /// 该问题已修，但保留兜底以应对真正的网络异常），
 /// 自动改用 REST 轮询最新K线并推送，恢复与不依赖 WS 的实时性。
 /// </summary>
-public sealed class KlineStreamService : IAsyncDisposable
+public sealed class KlineStreamService(
+    IOptions<BinanceOptions> options,
+    BinanceRestClient rest,
+    ILogger<KlineStreamService> logger) : IAsyncDisposable
 {
-    private readonly BinanceOptions _options;
-    private readonly BinanceRestClient _rest;
-    private readonly ILogger<KlineStreamService> _logger;
     private readonly Lock _sync = new();
     private readonly Dictionary<string, Upstream> _streams = new(StringComparer.Ordinal);
 
-    public KlineStreamService(IOptions<BinanceOptions> options, BinanceRestClient rest, ILogger<KlineStreamService> logger)
-    {
-        _options = options.Value;
-        _rest = rest;
-        _logger = logger;
-    }
+
 
     /// <summary>订阅某市场某交易对某周期的实时K线；返回的 IDisposable 用于取消订阅。</summary>
     public IDisposable Subscribe(MarketKind market, TradingPair pair, string interval, Action<KlineUpdate> onKline)
@@ -44,9 +39,9 @@ public sealed class KlineStreamService : IAsyncDisposable
             if (!_streams.TryGetValue(key, out var existing) || existing.IsClosing)
             {
                 if (existing is not null) _streams.Remove(key);
-                var wsBase = (market == MarketKind.Futures ? _options.FuturesWsBaseUrl : _options.WsBaseUrl).TrimEnd('/');
+                var wsBase = (market == MarketKind.Futures ? options.Value.FuturesWsBaseUrl : options.Value.WsBaseUrl).TrimEnd('/');
                 var url = $"{wsBase}/ws/{streamKey}";
-                var created = new Upstream(key, url, market, pair, interval, _rest, _logger);
+                var created = new Upstream(key, url, market, pair, interval, rest, logger);
                 created.Closed = () =>
                 {
                     lock (_sync)
