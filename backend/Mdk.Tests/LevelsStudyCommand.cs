@@ -25,10 +25,24 @@ public static class LevelsStudyCommand
         var to = args.Length > 2 ? Date(args[2]) : Date("2026-01-01");
         var symbols = (args.Length > 3 ? args[3] : "BTCUSDT,ETHUSDT,SOLUSDT,BNBUSDT").Split(',');
         var intervals = (args.Length > 4 ? args[4] : "1h,4h").Split(',');
+        var market = args.Length > 5 && args[5].Equals("futures", StringComparison.OrdinalIgnoreCase)
+            ? MarketKind.Futures
+            : MarketKind.Spot;
+        var series = args.Length > 6 && args[6].Equals("mark", StringComparison.OrdinalIgnoreCase)
+            ? "mark"
+            : "last";
+        if (series == "mark" && market != MarketKind.Futures)
+        {
+            Console.WriteLine("标记价只有合约有（--series mark 需要 market=futures）");
+            return 1;
+        }
+
         var options = new LevelHoldStudyOptions();
         var barSeconds = intervals.ToDictionary(i => i, IntervalSeconds, StringComparer.Ordinal);
 
         Console.WriteLine("位点守住/跌破检验（预注册判据见 LevelHoldStudyOptions）");
+        Console.WriteLine($"市场：{market.ToString().ToLowerInvariant()} · 价格序列：{series}"
+            + (series == "mark" ? "（标记价——线上合约位点用的就是它）" : "（最新成交价）"));
         Console.WriteLine($"窗口：{args.ElementAtOrDefault(1) ?? "2025-01-01"} ~ {args.ElementAtOrDefault(2) ?? "2026-01-01"}（不含）"
             + $" · 步长 {options.StepBars} 根 · 触碰窗 {options.TouchWindow} 根 · 持有窗 {options.HoldWindow} 根");
         Console.WriteLine($"守住 = 触碰后向位点方向走 {options.BounceAtr}×ATR；跌破 = 收盘穿过位点 {options.BreakAtr}×ATR（同根两者都满足时按跌破）");
@@ -43,7 +57,9 @@ public static class LevelsStudyCommand
             var pair = TradingPair.Parse(symbolText.Trim());
             foreach (var interval in intervals)
             {
-                var candles = await rest.GetKlinesRangeAsync(MarketKind.Spot, pair, interval, from, to);
+                var candles = series == "mark"
+                    ? await rest.GetMarkPriceKlinesRangeAsync(pair, interval, from, to)
+                    : await rest.GetKlinesRangeAsync(market, pair, interval, from, to);
                 var found = LevelHoldStudy.Collect(pair.Symbol, interval, candles, options);
                 events.AddRange(found);
                 Console.WriteLine($"  {pair.Symbol,-10} {interval,-4} K线 {candles.Length,6} 根 · 事件 {found.Count,6}"
@@ -55,12 +71,15 @@ public static class LevelsStudyCommand
         var result = LevelHoldStudy.Summarize(events, options, barSeconds);
         Print(result, options);
 
-        var outPath = Path.Combine("tools", "verify", "levels-study.json");
+        var suffix = market == MarketKind.Spot ? "" : $"-{market.ToString().ToLowerInvariant()}-{series}";
+        var outPath = Path.Combine("tools", "verify", $"levels-study{suffix}.json");
         Directory.CreateDirectory(Path.GetDirectoryName(outPath)!);
         var payload = new
         {
             generatedAt = DateTimeOffset.UtcNow.ToUnixTimeSeconds(),
             window = new { from = args.ElementAtOrDefault(1) ?? "2025-01-01", to = args.ElementAtOrDefault(2) ?? "2026-01-01" },
+            market = market.ToString().ToLowerInvariant(),
+            series,
             symbols,
             intervals,
             criteria = new

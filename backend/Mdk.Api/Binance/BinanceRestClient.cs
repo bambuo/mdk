@@ -118,6 +118,39 @@ public sealed class BinanceRestClient(
         return [.. all];
     }
 
+    /// <summary>
+    /// 按时间区间拉取**标记价**K线（仅合约，自动分页）：研究用——线上合约位点就是按标记价算的，
+    /// 检验必须用同一序列，否则"结论"与产品不同底。
+    /// </summary>
+    public async Task<Candle[]> GetMarkPriceKlinesRangeAsync(
+        TradingPair pair, string interval, long fromSec, long toSec, CancellationToken ct = default)
+    {
+        if (pair.IsEmpty)
+            throw new ArgumentException($"交易对为空（{pair.Symbol}）：应先经交易对解析并校验 IsEmpty", nameof(pair));
+        var all = new List<Candle>();
+        var cursor = fromSec * 1000;
+        var endMs = toSec * 1000;
+        var guard = 0;
+        while (cursor <= endMs && guard++ < 400)
+        {
+            var url = $"{MarketKind.Futures.ToRestPath()}/markPriceKlines"
+                + $"?symbol={pair.Symbol}&interval={interval}&startTime={cursor}&endTime={endMs}&limit=1500";
+            using var response = await SendAsync(MarketKind.Futures, url, ct);
+            var rows = await response.Content.ReadFromJsonAsync<JsonElement[][]>(cancellationToken: ct)
+                       ?? throw new BinanceException(-1, "markPriceKlines 返回为空");
+            if (rows.Length == 0) break;
+            var page = ParseKlines(rows);
+            all.AddRange(page);
+            var lastMs = rows[^1][0].GetInt64();
+            if (page.Length < 1500) break;
+            if (lastMs <= cursor) break;
+            cursor = lastMs + 1;
+            if (cursor <= endMs) await Task.Delay(120, ct);
+        }
+
+        return [.. all];
+    }
+
     private static Candle[] ParseKlines(JsonElement[][] rows)
     {
         var candles = new Candle[rows.Length];
