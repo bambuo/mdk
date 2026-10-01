@@ -1,6 +1,7 @@
 using Mdk.Api.Analysis;
 using Mdk.Api.Binance;
 using Mdk.Api.Domain;
+using Mdk.Api.Notify;
 
 namespace Mdk.Api.Endpoints;
 
@@ -130,6 +131,16 @@ internal static class WatchlistEndpoints
                 return Results.Empty;
             })
             .WithSummary("SSE：监控列表内新入库的已确认缠论买卖点（实时推送，替代前端轮询）");
+
+        app.MapPost("/api/notify/feishu/test", async (FeishuNotifier notifier, CancellationToken ct) =>
+            {
+                var (ok, detail) = await notifier.SendTestAsync(ct);
+                return Results.Ok(new { ok, detail, status = notifier.Describe() });
+            })
+            .WithSummary("飞书提醒自检：发一条示例卡片，验证 webhook 与签名配置是否正确");
+
+        app.MapGet("/api/notify/feishu", (FeishuNotifier notifier) => Results.Ok(new { status = notifier.Describe() }))
+            .WithSummary("飞书提醒配置状态（不回显完整 webhook 地址）");
 
         app.MapGet("/api/watchlist/signals", (
                 int? limit, WatchlistMonitorService monitor, SignalStore signals) =>

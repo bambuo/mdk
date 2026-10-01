@@ -875,6 +875,37 @@ vue-tsc + 构建通过。
 ### 验证
 构建 **0 警告 0 错误**；自带测试 144/144；重启后合约/现货分析正常。
 
+## 0.30 飞书 webhook 提醒（2026-10-01，用户要求"服务端 webhook 提醒对接飞书"）
+把提醒从"页面开着才生效"升级为服务端推送：监控列表出现新的已确认买卖点时直接发到飞书群。
+
+### 实现（`backend/Mdk.Api/Notify/`）
+| 组件 | 职责 |
+|---|---|
+| `FeishuOptions` | 配置：`WebhookUrl` / `Secret`（签名校验）/ `CooldownMinutes`(30) / `TimeoutSeconds`(10)；**未配置 URL 即整体禁用** |
+| `FeishuSign` | 签名（纯函数）：原文 `timestamp\nsecret` 作 HMAC-SHA256 **密钥**、消息体为空、Base64；**秒级时间戳** |
+| `FeishuMessage` | 卡片构造（纯函数）：买点绿卡 / 卖点红卡，标题"标的 周期 买点"，正文含方向/价格/止损参考/时间，脚注"结构分析提示，不构成投资建议" |
+| `SignalCooldown` | 同向冷却（纯逻辑）：标的+周期+方向 窗口内只发一次，**反向放行** |
+| `FeishuNotifier` | 订阅广播器**已过滤**信号 → 冷却 → 后台队列异步 POST（事件在台账写锁内触发，故只入队不阻塞） |
+
+**口径复用**：过滤（监控列表内/已确认/缠论/origin=live）不复制——`WatchlistSignalBroadcaster` 新增
+`Published` 事件，SSE 与飞书共用同一套过滤，避免两处口径漂移。
+
+**自检**：`POST /api/notify/feishu/test` 发示例卡片；`GET /api/notify/feishu` 看配置状态（不回显完整地址）。
+
+### 实现中抓到的问题（已修）
+`AddHttpClient<FeishuNotifier>()` 会把类型注册为 **transient**，而每个实例都会订阅广播事件 →
+自检端点每被调用一次就多一个订阅者（**重复发送 + 泄漏**）。日志里"飞书提醒未配置"在同一启动中出现 3 次即是证据。
+改为 `IHttpClientFactory.CreateClient(name) + AddSingleton` 后，实调用端点 6 次，构造计数仍为 1。
+
+### 签名正确性（已知答案向量）
+签名算法易错（密钥与消息体位置颠倒、时间戳用毫秒、用十六进制而非 Base64），故用 **Python 独立实现**
+算得向量并写死进测试：`FeishuSign.Compute(1790827000, "test-secret-abc123")`
+= `V2KSAYi2cOIYGyzPG82Wb6rQ3rhT2vQUHceEtRhTBpY=`。另有"密钥/时间戳变化则签名变化""秒级而非毫秒""未配置密钥不带 timestamp/sign"等用例。
+
+### 验证
+自带测试 **152/152**（新增飞书 8 例）；构建 0 警告 0 错误；未配置时实测：启动日志明确提示且不发请求、
+自检端点返回清晰指引、端点调用不产生额外实例。**待用户填入真实 WebhookUrl 后即可端到端验证。**
+
 ## 1. 目录结构（全新项目 /Users/johana/Desktop/mdk）
 ```
 mdk/

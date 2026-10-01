@@ -1,5 +1,5 @@
-using System.Collections.Concurrent;
 using System.Threading.Channels;
+using Mdk.Api.Notify;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using Mdk.Api.Domain;
@@ -32,6 +32,12 @@ public sealed class WatchlistSignalBroadcaster : IDisposable
         // 事件在 SignalStore 的锁内触发：本处理器不得再回调 SignalStore（无此依赖），且整体 try/catch 隔离异常
         signals.SignalRecorded += OnSignalRecorded;
     }
+
+    /// <summary>
+    /// 已过滤信号的发布事件（SSE 与外部通知器共用**同一套过滤**——不复制过滤口径）。
+    /// 在 SignalStore 的写锁内同步触发，订阅方必须**非阻塞**（外部通知走后台队列，见 FeishuNotifier）。
+    /// </summary>
+    public event Action<NotifiableSignal>? Published;
 
     /// <summary>订阅：返回通道读取端与订阅 Id（取消订阅时用）。</summary>
     public Guid Subscribe(out ChannelReader<string> reader)
@@ -70,25 +76,26 @@ public sealed class WatchlistSignalBroadcaster : IDisposable
             var watched = _store.All().Any(x => x.Market == e.Market && x.Pair == e.Pair && x.Enabled);
             if (!watched) return;
 
-            var payload = JsonSerializer.Serialize(new
-            {
-                market = MarketKey(e.Market),
-                symbol = e.Pair.Symbol,
-                baseAsset = e.Pair.BaseAsset,
-                quoteAsset = e.Pair.QuoteAsset,
-                interval = e.Interval,
-                kind = e.Kind,
-                side = e.Side,
-                time = e.Time,
-                price = e.Price,
-                stopPrice = e.StopPrice,
-                note = e.Note,
-            }, JsonOpts);
+            var signal = new NotifiableSignal(
+                Market: MarketKey(e.Market),
+                Symbol: e.Pair.Symbol,
+                BaseAsset: e.Pair.BaseAsset,
+                QuoteAsset: e.Pair.QuoteAsset,
+                Interval: e.Interval,
+                Kind: e.Kind,
+                Side: e.Side,
+                Time: e.Time,
+                Price: e.Price,
+                StopPrice: e.StopPrice,
+                Note: e.Note);
 
             lock (_sync)
             {
-                foreach (var channel in _clients.Values) channel.Writer.TryWrite(payload);
+                foreach (var channel in _clients.Values) channel.Writer.TryWrite(JsonSerializer.Serialize(signal, JsonOpts));
             }
+
+            // 外部通知器（飞书等）：订阅方必须非阻塞，异常与它无关地隔离
+            Published?.Invoke(signal);
         }
         catch (Exception)
         {

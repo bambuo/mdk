@@ -86,6 +86,30 @@ frontend/
   src/composables/ useKlineSocket（自动重连）
 ```
 
+## 飞书提醒（可选）
+
+监控列表内出现**新的已确认缠论买卖点**时，推送到飞书群（关页面也能收；桌面提醒仅在页面打开时生效）。
+
+配置（`backend/Mdk.Api/appsettings.json`，**只需写这两项**；配置守卫要求"与默认值相同的副本不写"）：
+
+```json
+"Feishu": {
+  "WebhookUrl": "https://open.feishu.cn/open-apis/bot/v2/hook/你的-机器人-token",
+  "Secret": "开启签名校验时填写；未开启则留空"
+}
+```
+
+获取方式：飞书群 → 设置 → 群机器人 → 添加机器人 → 自定义机器人 → 复制 Webhook 地址。
+若机器人开启了"签名校验"，必须把密钥填进 `Secret`（否则飞书返回 `19021 签名校验失败`）。
+
+验证：`curl -X POST http://localhost:5099/api/notify/feishu/test` —— 成功会在群里看到一张示例卡片；
+`GET /api/notify/feishu` 查看配置状态（不回显完整地址）。
+
+行为口径：只推**监控列表内**的标的；只推**已确认**买卖点（盘中预警不推）；只推**实时落库**信号
+（回填/历史重放不推）；同一 标的+周期+方向 **30 分钟冷却**（反向不冷却）；未配置时不发任何请求。
+冷却与卡片口径见 `backend/Mdk.Api/Notify/FeishuMessage.cs`；测试见 `Mdk.Tests/FeishuNotifierTests.cs`
+（签名用独立实现算得的已知答案向量锁定）。
+
 ## 校验
 
 前端静态检查：`cd frontend && bun run build`（= `vue-tsc --noEmit` + 构建）。vue-tsc 需要 `node` 在 PATH 上；

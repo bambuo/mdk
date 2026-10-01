@@ -19,6 +19,7 @@ public static class Program
         ConfigGuardTests.Register(kit);
         AttentionTests.Register(kit);
         WatchlistSignalBroadcasterTests.Register(kit);
+        FeishuNotifierTests.Register(kit);
         WilderSmoothingTests.Register(kit);
         RsiTests.Register(kit);
         AtrTests.Register(kit);

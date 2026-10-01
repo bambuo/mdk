@@ -6,6 +6,8 @@ using Mdk.Api.Analysis.Chan;
 using Mdk.Api.Binance;
 using Mdk.Api.Domain;
 using Mdk.Api.Endpoints;
+using Mdk.Api.Notify;
+using Microsoft.Extensions.Options;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -13,6 +15,7 @@ builder.Services.Configure<BinanceOptions>(builder.Configuration.GetSection(Bina
 builder.Services.Configure<SignalOptions>(builder.Configuration.GetSection(SignalOptions.SectionName));
 builder.Services.Configure<ChanOptions>(builder.Configuration.GetSection(ChanOptions.SectionName));
 builder.Services.Configure<BackfillOptions>(builder.Configuration.GetSection(BackfillOptions.SectionName));
+builder.Services.Configure<FeishuOptions>(builder.Configuration.GetSection(FeishuOptions.SectionName));
 // exchangeInfo（现货约 17MB）必须启用压缩传输并放宽超时，否则会下载超时
 builder.Services.AddHttpClient<BinanceRestClient>(client => client.Timeout = TimeSpan.FromSeconds(60))
     .ConfigurePrimaryHttpMessageHandler(() => new HttpClientHandler
@@ -33,6 +36,16 @@ builder.Services.AddSingleton(sp => new WatchlistStore(
 builder.Services.AddSingleton<WatchlistMonitorService>();
 // 监控列表信号广播器：订阅台账入库事件，供 SSE 端点推送
 builder.Services.AddSingleton<WatchlistSignalBroadcaster>();
+// 飞书提醒：未配置 WebhookUrl 时惰性禁用（见 FeishuNotifier）。
+// **必须是单例**：AddHttpClient<T> 会把 T 注册为 transient，而每个实例都会订阅广播事件 →
+// 自检端点每被调用一次就多一个订阅者（重复发送 + 泄漏）。故用工厂 HttpClient + 单例注册。
+builder.Services.AddHttpClient(nameof(FeishuNotifier));
+builder.Services.AddSingleton(sp => new FeishuNotifier(
+    sp.GetRequiredService<IHttpClientFactory>().CreateClient(nameof(FeishuNotifier)),
+    sp.GetRequiredService<IOptions<FeishuOptions>>(),
+    sp.GetRequiredService<WatchlistSignalBroadcaster>(),
+    sp.GetRequiredService<ILogger<FeishuNotifier>>()));
+builder.Services.AddHostedService(sp => sp.GetRequiredService<FeishuNotifier>());
 builder.Services.AddHostedService(sp => sp.GetRequiredService<WatchlistMonitorService>());
 builder.Services.AddSingleton<SignalBackfillService>();
 builder.Services.AddHostedService(sp => sp.GetRequiredService<SignalBackfillService>());
