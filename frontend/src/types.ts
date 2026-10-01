@@ -255,6 +255,28 @@ export interface AnalysisResult {
   evidence?: EvidenceBucket[] | null
   /** 位点的价格基础：last=最新成交价；mark=标记价（仅合约，防插针） */
   levelsBasis?: 'last' | 'mark'
+  /** 杠杆面事实（资金费率/持仓量/基差/主动买占比）；现货只有主动买占比 */
+  leverage?: LeverageFacts | null
+}
+
+/** 杠杆面事实：只陈述事实（是否拥挤、突破是否由杠杆推动），不含概率推断 */
+export interface LeverageFacts {
+  /** 当期资金费率（每期结算，通常 8h；0.0001 = 0.01%） */
+  fundingRate: number | null
+  /** 下次资金费结算时间（Unix 秒） */
+  nextFundingTime: number | null
+  /** 未平仓合约量（以标的币计） */
+  openInterest: number | null
+  /** 持仓量 24h 变化（%） */
+  openInterestChangePct: number | null
+  /** 标记价（合约） */
+  markPrice: number | null
+  /** 基差：标记价相对指数价的偏离（%） */
+  basisPct: number | null
+  /** 主动买占比（0~1，0.5 为买卖均衡） */
+  takerBuyShare: number | null
+  /** 主动买占比所用的K线根数 */
+  takerBars: number
 }
 
 /** 图表指标显示开关 */

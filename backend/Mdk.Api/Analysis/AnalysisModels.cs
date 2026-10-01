@@ -161,7 +161,9 @@ public sealed record AnalysisResult(
     /// </summary>
     IReadOnlyList<EvidenceBucket>? Evidence = null,
     /// <summary>位点的价格基础：last=最新成交价K线；mark=标记价K线（仅合约，用于避免插针造成的假位点）。</summary>
-    string LevelsBasis = "last");
+    string LevelsBasis = "last",
+    /// <summary>杠杆面事实（资金费率/持仓量/基差/主动买占比）；现货只有主动买占比，缺失为 null。</summary>
+    LeverageFacts? Leverage = null);
 
 public sealed record KlinesResponse(
     string Market,

@@ -9,7 +9,9 @@ public readonly record struct Candle(
     decimal High,
     decimal Low,
     decimal Close,
-    decimal Volume);
+    decimal Volume,
+    /// <summary>主动买成交量（币安K线第 10 列 takerBuyBaseVolume）；不提供时为 0。</summary>
+    decimal TakerBuyVolume = 0m);
 
 /// <summary>币安 WS kline 推送归一化后的增量K线（当前K线实时更新，IsFinal 表示该K线已收盘）。</summary>
 public sealed record KlineUpdate(

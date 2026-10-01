@@ -17,6 +17,7 @@ public static class Program
         EvidenceTests.Register(kit);
         StructurePositionTests.Register(kit);
         PriceLevelTests.Register(kit);
+        LeverageTests.Register(kit);
         ConfigGuardTests.Register(kit);
         LocalSettingsTests.Register(kit);
         AttentionTests.Register(kit);

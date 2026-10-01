@@ -62,6 +62,46 @@ const confluenceOnly = ref(false)
 /** 共振分组绩效（来自 byConfluence） */
 const confluenceStats = computed(() => props.stats?.byConfluence ?? [])
 
+/** 带符号数值（+1.2 / -0.3），用于费率与变化率 */
+function signed(value: number, digits: number): string {
+  return `${value >= 0 ? '+' : ''}${value.toFixed(digits)}`
+}
+
+/**
+ * 杠杆面事实（**只陈述事实**）：资金费率与年化、持仓量与 24h 变化、主动买占比。
+ * 费率极值 = 拥挤；持仓与价格背离 = 突破可疑；主动买占比 = 近 N 根的主动成交方向。
+ */
+const leverageFacts = computed<string[]>(() => {
+  const l = props.analysis?.leverage
+  if (!l) return []
+  const parts: string[] = []
+  if (l.fundingRate != null) {
+    const annual = l.fundingRate * 3 * 365 * 100
+    const hours = l.nextFundingTime != null
+      ? Math.max(0, Math.round((l.nextFundingTime - Date.now() / 1000) / 3600))
+      : null
+    parts.push(`费率 ${signed(l.fundingRate * 100, 4)}%/期（年化 ${signed(annual, 1)}%${hours != null ? `，${hours}h 后结算` : ''}）`)
+  }
+  if (l.openInterest != null) {
+    const change = l.openInterestChangePct != null ? `（24h ${signed(l.openInterestChangePct, 1)}%）` : ''
+    parts.push(`持仓 ${formatPrice(l.openInterest)}${change}`)
+  }
+  if (l.takerBuyShare != null) parts.push(`主动买 ${(l.takerBuyShare * 100).toFixed(0)}%`)
+  return parts
+})
+
+/** 杠杆面的悬停说明：把不进正文的口径与数值放在这里 */
+const leverageTitle = computed(() => {
+  const l = props.analysis?.leverage
+  if (!l) return ''
+  const parts: string[] = []
+  if (l.markPrice != null) parts.push(`标记价 ${formatPrice(l.markPrice)}`)
+  if (l.basisPct != null) parts.push(`基差 ${signed(l.basisPct, 3)}%`)
+  if (l.takerBuyShare != null) parts.push(`主动买占比取近 ${l.takerBars} 根K线`)
+  if (l.fundingRate == null) parts.push('现货无资金费率与持仓量')
+  return parts.join(' · ')
+})
+
 /** 次级别数据覆盖提示：次级别K线不足整个显示窗口时给出说明（结构位置面板底部展示） */
 const lowerCoverageHint = computed(() => {
   const levels = props.analysis?.chanLevels
@@ -342,6 +382,16 @@ function sideColor(side: string) {
             </template>
             <template v-else>窗口内暂无买卖点</template>
           </span>
+
+          <!-- 杠杆面事实（合约有费率/持仓；现货只有主动买占比）：环境描述，不作方向判断 -->
+          <template v-if="leverageFacts.length">
+            <span class="k">杠杆面</span>
+            <span class="v" :title="leverageTitle">
+              <template v-for="(fact, i) in leverageFacts" :key="fact">
+                <span v-if="i > 0" class="pos-sep">·</span>{{ fact }}
+              </template>
+            </span>
+          </template>
         </div>
 
         <!-- 级别对照：同一现价在各级别中枢的归属 -->

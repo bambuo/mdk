@@ -130,10 +130,46 @@ public sealed class BinanceRestClient(
                 High: Num(row[2]),
                 Low: Num(row[3]),
                 Close: Num(row[4]),
-                Volume: Num(row[5]));
+                Volume: Num(row[5]),
+                // 第 10 列：主动买成交量（现货与合约K线同结构；缺失时按 0 处理）
+                TakerBuyVolume: row.Length > 9 ? Num(row[9]) : 0m);
         }
 
         return candles;
+    }
+
+    /// <summary>
+    /// 合约资金费率与标记价（**仅合约**；现货无此端点）：标记价、指数价、当期资金费率、下次结算时间。
+    /// 费率与基差是"当前位置是否拥挤"的事实，不构成方向判断。
+    /// </summary>
+    public async Task<PremiumIndex> GetPremiumIndexAsync(TradingPair pair, CancellationToken ct = default)
+    {
+        if (pair.IsEmpty)
+            throw new ArgumentException($"交易对为空（{pair.Symbol}）：应先经交易对解析并校验 IsEmpty", nameof(pair));
+        var url = $"{MarketKind.Futures.ToRestPath()}/premiumIndex?symbol={pair.Symbol}";
+        using var response = await SendAsync(MarketKind.Futures, url, ct);
+        using var doc = JsonDocument.Parse(await response.Content.ReadAsStringAsync(ct));
+        var root = doc.RootElement;
+        return new PremiumIndex(
+            MarkPrice: Num(root.GetProperty("markPrice")),
+            IndexPrice: Num(root.GetProperty("indexPrice")),
+            FundingRate: root.TryGetProperty("lastFundingRate", out var rate) ? Num(rate) : null,
+            NextFundingTime: root.TryGetProperty("nextFundingTime", out var next) ? next.GetInt64() / 1000 : null);
+    }
+
+    /// <summary>持仓量历史（`/futures/data/openInterestHist`，1h 粒度、最多 30 天）；用于算 24h 变化。</summary>
+    public async Task<IReadOnlyList<OpenInterestPoint>> GetOpenInterestHistAsync(
+        TradingPair pair, string period = "1h", int limit = 25, CancellationToken ct = default)
+    {
+        if (pair.IsEmpty)
+            throw new ArgumentException($"交易对为空（{pair.Symbol}）：应先经交易对解析并校验 IsEmpty", nameof(pair));
+        var url = $"/futures/data/openInterestHist?symbol={pair.Symbol}&period={period}&limit={limit}";
+        using var response = await SendAsync(MarketKind.Futures, url, ct);
+        var rows = await response.Content.ReadFromJsonAsync<JsonElement[]>(cancellationToken: ct) ?? [];
+        return [.. rows.Select(row => new OpenInterestPoint(
+            row.GetProperty("timestamp").GetInt64() / 1000,
+            Num(row.GetProperty("sumOpenInterest")),
+            Num(row.GetProperty("sumOpenInterestValue"))))];
     }
 
     /// <summary>全部交易对 24h 行情（每市场缓存 30 秒，避免多个请求打超频限制）。</summary>

@@ -15,6 +15,12 @@ public sealed class AnalysisService(
     private static readonly TimeSpan HtfCacheTtl = TimeSpan.FromSeconds(60);
     private static readonly TimeSpan EvidenceCacheTtl = TimeSpan.FromSeconds(60);
 
+    /// <summary>合约杠杆面事实的缓存时长（费率 8h 结算一次、持仓量 1h 粒度，60s 足够新鲜）。</summary>
+    private static readonly TimeSpan LeverageCacheTtl = TimeSpan.FromSeconds(60);
+
+    private readonly ConcurrentDictionary<string, ((decimal? Funding, long? NextFundingTime, decimal? Mark, decimal? Basis, decimal? Oi, decimal? OiChange) Value, DateTimeOffset At)>
+        _leverageCache = new();
+
     /// <summary>可信度表缓存（键 = 市场|周期）：台账只增不改，60s 内的统计不会影响使用判断。</summary>
     private readonly ConcurrentDictionary<string, (IReadOnlyList<EvidenceBucket> Buckets, DateTimeOffset At)>
         _evidenceCache = new();
@@ -113,7 +119,66 @@ public sealed class AnalysisService(
             chanOptions, chanWindow, subLevel, subLevelInterval, lowerLevel, lowerLevelInterval,
             levelCandles, _levelOptions, levelsBasis);
         RecordSignals(market, pair, interval, result);
-        return result with { Evidence = GetEvidenceCached(market, interval) };
+        var leverage = await BuildLeverageAsync(market, pair, candles, ct);
+        return result with { Evidence = GetEvidenceCached(market, interval), Leverage = leverage };
+    }
+
+    /// <summary>
+    /// 杠杆面事实：主动买占比按当前显示窗口现算（便宜）；资金费率/持仓量走 60s 缓存（贵且变化慢）。
+    /// 拿不到就是 null（现货本就没有费率与持仓量），不阻塞分析。
+    /// </summary>
+    private async Task<LeverageFacts> BuildLeverageAsync(
+        MarketKind market, TradingPair pair, IReadOnlyList<Models.Candle> candles, CancellationToken ct)
+    {
+        var taker = LeverageMath.TakerBuyShare(candles);
+        var bars = Math.Min(24, candles.Count);
+
+        decimal? funding = null, mark = null, basis = null, openInterest = null, oiChange = null;
+        long? nextFunding = null;
+        if (market == MarketKind.Futures)
+        {
+            var cached = await GetFuturesLeverageCachedAsync(pair, ct);
+            if (cached is { } value)
+            {
+                (funding, nextFunding, mark, basis, openInterest, oiChange) = value;
+            }
+        }
+
+        return new LeverageFacts(funding, nextFunding, openInterest, oiChange, mark, basis, taker, bars);
+    }
+
+    /// <summary>合约侧事实（费率/标记价/持仓量）60s 缓存；失败不缓存，下次请求重试。</summary>
+    private async Task<(decimal? Funding, long? NextFundingTime, decimal? Mark, decimal? Basis, decimal? Oi, decimal? OiChange)?>
+        GetFuturesLeverageCachedAsync(TradingPair pair, CancellationToken ct)
+    {
+        if (_leverageCache.TryGetValue(pair.Symbol, out var hit) &&
+            DateTimeOffset.UtcNow - hit.At < LeverageCacheTtl)
+        {
+            return hit.Value;
+        }
+
+        try
+        {
+            var premium = await rest.GetPremiumIndexAsync(pair, ct);
+            var history = await rest.GetOpenInterestHistAsync(pair, "1h", 25, ct);
+            var openInterest = history.Count > 0 ? history[^1].SumOpenInterest : (decimal?)null;
+            var change = history.Count >= 2
+                ? LeverageMath.ChangePct(history[0].SumOpenInterest, history[^1].SumOpenInterest)
+                : null;
+            var value = (
+                Funding: premium.FundingRate,
+                NextFundingTime: premium.NextFundingTime,
+                Mark: premium.MarkPrice,
+                Basis: LeverageMath.BasisPct(premium.MarkPrice, premium.IndexPrice),
+                Oi: openInterest,
+                OiChange: change);
+            _leverageCache[pair.Symbol] = (value, DateTimeOffset.UtcNow);
+            return value;
+        }
+        catch (Exception ex) when (ex is BinanceException or HttpRequestException or TaskCanceledException)
+        {
+            return null;
+        }
     }
 
     /// <summary>把本次分析产出的信号写入台账（自然键去重：同一信号只记一条）。</summary>
