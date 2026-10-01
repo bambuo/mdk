@@ -11,7 +11,6 @@ public sealed class ChanOptions
     public bool Enabled { get; set; } = true;
 
     /// <summary>笔的定义：Loose=新笔（分型间至少间隔 2 根独立合并K线），Strict=老笔（至少 3 根）。</summary>
-
     /// <summary>背驰判定阈值：离开段 MACD 面积 / 进入段面积 低于该值视为背驰。</summary>
     public decimal DivergenceAreaRatio { get; set; } = 0.9m;
 
@@ -71,5 +70,4 @@ public sealed class ChanOptions
         MultiLevel = multiLevel ?? MultiLevel,
         LowerLevelMinBars = LowerLevelMinBars,
     };
-
 }

@@ -40,6 +40,7 @@ public sealed class SignalOutcomeService(
             {
                 logger.LogWarning(ex, "信号绩效扫描异常");
             }
+
             try
             {
                 await Task.Delay(ScanInterval, stoppingToken);
@@ -80,6 +81,7 @@ public sealed class SignalOutcomeService(
                 logger.LogWarning("绩效评估拉取K线失败 {Symbol} {Interval}: {Message}", pair.Symbol, interval, ex.Message);
                 continue;
             }
+
             if (candles.Length == 0) continue;
 
             var closes = candles.Select(c => c.Close).ToArray();
@@ -94,6 +96,7 @@ public sealed class SignalOutcomeService(
                     store.MarkOutcome(entry.Id, new SignalOutcome { Status = "expired", EvaluatedAt = now });
                     continue;
                 }
+
                 if (idx + horizon >= candles.Length) continue; // 持有期未满，留待下轮
 
                 var dir = entry.Side == "buy" ? 1 : -1;
@@ -107,6 +110,7 @@ public sealed class SignalOutcomeService(
                     driftSum += closes[j + horizon] / closes[j] - 1;
                     driftN++;
                 }
+
                 var drift = driftN > 0 ? driftSum / driftN : 0;
 
                 decimal mfe = decimal.MinValue;

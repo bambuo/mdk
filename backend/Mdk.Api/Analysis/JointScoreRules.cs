@@ -38,8 +38,8 @@ public static class JointScoreRules
         decimal price, decimal? ema200, decimal? rsi, decimal? areaRatio,
         bool isBuy, decimal? riskPct, decimal? lagShare)
     {
-        return new[]
-        {
+        return
+        [
             new JointScoreFeature("逆 EMA200（反转语境）",
                 ema200 is { } e200 && (isBuy ? price < e200 : price > e200)),
             new JointScoreFeature("强背驰（面积比 ≤0.7）", areaRatio is { } ar && ar <= 0.7m),
@@ -47,7 +47,7 @@ public static class JointScoreRules
                 rsi is { } rsiVal && (isBuy ? rsiVal <= 35m : rsiVal >= 65m)),
             new JointScoreFeature("入场成本低（≤0.5R）", lagShare is { } ls && ls <= 0.5m),
             new JointScoreFeature("止损效率（≤2.5%）", riskPct is { } rp && rp <= 0.025m),
-        };
+        ];
     }
 
     // 3 类（延续语义）的 5 特征。
@@ -55,8 +55,8 @@ public static class JointScoreRules
         decimal price, decimal? ema200, decimal? rsi, decimal? macdHist,
         bool isBuy, decimal? riskPct, decimal? lagShare)
     {
-        return new[]
-        {
+        return
+        [
             new JointScoreFeature("顺 EMA200（延续语境）",
                 ema200 is { } e200 && (isBuy ? price > e200 : price < e200)),
             new JointScoreFeature("RSI 顺向（买≥50 / 卖≤50）",
@@ -65,7 +65,7 @@ public static class JointScoreRules
                 macdHist is { } hist && (isBuy ? hist >= 0m : hist <= 0m)),
             new JointScoreFeature("入场成本低（≤0.5R）", lagShare is { } ls && ls <= 0.5m),
             new JointScoreFeature("止损效率（≤2.5%）", riskPct is { } rp && rp <= 0.025m),
-        };
+        ];
     }
 
     // 滞后占比 = |入场价 − 结构参考价| ÷ |入场价 − 失效位|。

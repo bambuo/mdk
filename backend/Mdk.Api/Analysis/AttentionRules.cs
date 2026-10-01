@@ -66,6 +66,7 @@ public static class AttentionRules
             if (p.MovedR is { } m) bits.Add($"已走 {m:0.00}R");
             facts.Add(string.Join(" · ", bits));
         }
+
         if (p.DistanceToStopReferencePct is { } d) facts.Add($"距止损参考 {d * 100m:0.##}%");
 
         // ── 判定顺序：先排除"不可追"，再看是否有新鲜的三类位置 ──
@@ -94,7 +95,8 @@ public static class AttentionRules
         if (fresh && p.LastKind is "1买" or "1卖")
         {
             var strong = p.LastAreaRatio is { } ar && ar <= StrongDivergence;
-            return new Verdict("watch", $"可以关注：趋势末端背驰（{p.LastKind}{(strong ? $"，面积比 {p.LastAreaRatio:0.00}" : "，背驰偏弱")}）", facts,
+            return new Verdict("watch",
+                $"可以关注：趋势末端背驰（{p.LastKind}{(strong ? $"，面积比 {p.LastAreaRatio:0.00}" : "，背驰偏弱")}）", facts,
                 "1 类是最难的一类：需两个以上同向中枢后的背驰才算趋势末端；本项目样本里 1 类表现最差（逆势位）。",
                 "等第 2 类确认再动手——即背驰后首次回抽不破前低/前高。",
                 movedTooFar ? $"已走 {p.MovedR:0.00}R，成本已高。" : null);

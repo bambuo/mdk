@@ -87,7 +87,10 @@ public static class ChanBackfill
     }
 
     private sealed record LevelPoint(
-        ChanBuySellPoint Point, decimal? Adx, decimal? AtrPct, decimal? BandwidthPct,
+        ChanBuySellPoint Point,
+        decimal? Adx,
+        decimal? AtrPct,
+        decimal? BandwidthPct,
         JointScoreDetail Detail);
 
     /// <summary>单级别的逐根复算（不含高周期相关内容，供 L0 与 L1 复用）。</summary>
@@ -109,7 +112,7 @@ public static class ChanBackfill
         {
             var barTime = history[i].Time;
             if (barTime < fromTime || barTime > toTime) continue;
-            if (i + 1 < windowBars) continue;   // 历史不足以构成完整内部窗口
+            if (i + 1 < windowBars) continue; // 历史不足以构成完整内部窗口
 
             var window = new Candle[windowBars];
             for (var k = 0; k < windowBars; k++) window[k] = history[i - windowBars + 1 + k];
@@ -123,6 +126,7 @@ public static class ChanBackfill
                 highs[k] = window[k].High;
                 lows[k] = window[k].Low;
             }
+
             var macdHist = Macd.Compute(closes).Hist;
             var atr = Atr.Compute(highs, lows, closes, 14);
             // 联合打分特征：与在线同口径，在"缠论内部窗口"上计算
@@ -163,10 +167,12 @@ public static class ChanBackfill
                 results.Add(new LevelPoint(point, adx, atrPct, bandwidth, detail));
             }
         }
+
         return results;
     }
 
-    private static bool? TrendAligned(IReadOnlyList<Candle>? htf, decimal?[]? ema50, long htfSeconds, long time, string side)
+    private static bool? TrendAligned(IReadOnlyList<Candle>? htf, decimal?[]? ema50, long htfSeconds, long time,
+        string side)
     {
         if (htf is null || ema50 is null || htfSeconds <= 0) return null;
         for (var j = htf.Count - 1; j >= 0; j--)
@@ -176,6 +182,7 @@ public static class ChanBackfill
             var above = htf[j].Close > ema50[j];
             return side == "buy" ? above : !above;
         }
+
         return null;
     }
 }

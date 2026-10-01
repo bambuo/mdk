@@ -25,7 +25,8 @@ public static class ChanAnalyzer
 
         // 次级别确认：取次级别（下一档周期）最近一根"已确认"的笔方向，与本级别信号方向比较
         Func<long, long, string, bool>? subLevelConfirmed = null;
-        if (options.Enabled && options.RequireSubLevelConfirm && subLevelCandles is { Count: > 50 } sub && subLevelInterval is not null)
+        if (options.Enabled && options.RequireSubLevelConfirm && subLevelCandles is { Count: > 50 } sub &&
+            subLevelInterval is not null)
         {
             var subMerged = ChanInclusion.Merge(sub);
             var subFractals = ChanFractalDetector.Detect(subMerged, sub);
@@ -36,7 +37,8 @@ public static class ChanAnalyzer
         }
 
         var points = options.Enabled
-            ? ChanSignals.Detect(candles, strokes, pivots, macdHist, atr, options.DivergenceAreaRatio, options.WarmupBars, subLevelConfirmed)
+            ? ChanSignals.Detect(candles, strokes, pivots, macdHist, atr, options.DivergenceAreaRatio,
+                options.WarmupBars, subLevelConfirmed)
             : [];
 
         var series = BuildSeries(candles.Count, fractals, strokes, pivots);
@@ -77,6 +79,7 @@ public static class ChanAnalyzer
             var isUp = stroke.IsUp;
             if (side == "buy" ? isUp : !isUp) return true;
         }
+
         return false;
     }
 

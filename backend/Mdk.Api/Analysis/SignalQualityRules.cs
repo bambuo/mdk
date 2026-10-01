@@ -47,7 +47,8 @@ public static class SignalQualityRules
             return ("仅观察", $"中位超额 {medExcess * 100:+0.00m;-0.00m}% ≤ 0（均值被少数大赢家拉高）", topShare);
         if (topShare > 0.5m)
             return ("仅观察", $"单一标的占比 {topShare * 100:0}% > 50%（集中度过高）", topShare);
-        return ("可参考", $"波次 {m} · t={t:0.0} · 扣费后为正 {netPositive * 100:0}% · 中位超额 {medExcess * 100:+0.00;-0.00}%", topShare);
+        return ("可参考", $"波次 {m} · t={t:0.0} · 扣费后为正 {netPositive * 100:0}% · 中位超额 {medExcess * 100:+0.00;-0.00}%",
+            topShare);
     }
 
     /// <summary>记账K线收盘后多久内落库算"实时"（≤1.5 根K线；事后回算的历史样本不算）。
@@ -76,6 +77,7 @@ public static class SignalQualityRules
                 previous = entry.Time;
             }
         }
+
         return reps;
     }
 

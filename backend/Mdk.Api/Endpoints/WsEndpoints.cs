@@ -73,8 +73,10 @@ internal sealed class KlineSocketHandler(
 
     private readonly Channel<KlineUpdate> _incoming =
         Channel.CreateUnbounded<KlineUpdate>(new UnboundedChannelOptions { SingleReader = true });
+
     private readonly Channel<string> _outbound =
         Channel.CreateUnbounded<string>(new UnboundedChannelOptions { SingleReader = true });
+
     private readonly Channel<bool> _analysisTriggers =
         Channel.CreateUnbounded<bool>(new UnboundedChannelOptions { SingleReader = true });
 
@@ -88,8 +90,8 @@ internal sealed class KlineSocketHandler(
             if (update.Interval == interval) _incoming.Writer.TryWrite(update);
         });
 
-        var klineLoop = Task.Run(() => KlineLoopAsync(ct));
-        var analysisLoop = Task.Run(() => AnalysisLoopAsync(ct));
+        var klineLoop = Task.Run(() => KlineLoopAsync(ct), ct);
+        var analysisLoop = Task.Run(() => AnalysisLoopAsync(ct), ct);
         var periodic = new PeriodicTimer(AnalysisRefreshInterval);
         var periodicLoop = Task.Run(async () =>
         {
@@ -120,7 +122,7 @@ internal sealed class KlineSocketHandler(
         }
         finally
         {
-            linked.Cancel();
+            await linked.CancelAsync();
             subscription.Dispose();
             periodic.Dispose();
             _incoming.Writer.TryComplete();
@@ -133,11 +135,13 @@ internal sealed class KlineSocketHandler(
             {
                 // 循环被取消属预期
             }
+
             if (socket.State == WebSocketState.Open)
             {
                 try
                 {
-                    await socket.CloseAsync(WebSocketCloseStatus.NormalClosure, "server closing", CancellationToken.None);
+                    await socket.CloseAsync(WebSocketCloseStatus.NormalClosure, "server closing",
+                        CancellationToken.None);
                 }
                 catch
                 {
@@ -151,7 +155,8 @@ internal sealed class KlineSocketHandler(
     {
         await foreach (var update in _incoming.Reader.ReadAllAsync(ct))
         {
-            _outbound.Writer.TryWrite(JsonSerializer.Serialize(new WsEnvelope("kline", update), WsEndpoints.JsonOptions));
+            _outbound.Writer.TryWrite(
+                JsonSerializer.Serialize(new WsEnvelope("kline", update), WsEndpoints.JsonOptions));
             if (update.IsFinal) _analysisTriggers.Writer.TryWrite(true);
         }
     }
@@ -163,12 +168,16 @@ internal sealed class KlineSocketHandler(
             if (!trigger)
             {
                 // 盘中节流触发：只保留最新
-                while (_analysisTriggers.Reader.TryRead(out _)) { }
+                while (_analysisTriggers.Reader.TryRead(out _))
+                {
+                }
             }
+
             try
             {
                 var result = await analysisService.AnalyzeAsync(market, pair, interval, AnalysisKlineLimit, ct);
-                _outbound.Writer.TryWrite(JsonSerializer.Serialize(new WsEnvelope("analysis", result), WsEndpoints.JsonOptions));
+                _outbound.Writer.TryWrite(JsonSerializer.Serialize(new WsEnvelope("analysis", result),
+                    WsEndpoints.JsonOptions));
             }
             catch (OperationCanceledException)
             {

@@ -10,9 +10,21 @@ internal static class WatchlistEndpoints
     public sealed record AddRequest(string? Market, string? Symbol, string[]? Intervals);
 
     public sealed record WatchlistSignalView(
-        string Market, string Symbol, string BaseAsset, string QuoteAsset,
-        string Interval, string Source, string? Kind, string Side, long Time, decimal Price,
-        decimal? StopPrice, string? Note, string? Confluence, bool IsConfirmed, long RecordedAt,
+        string Market,
+        string Symbol,
+        string BaseAsset,
+        string QuoteAsset,
+        string Interval,
+        string Source,
+        string? Kind,
+        string Side,
+        long Time,
+        decimal Price,
+        decimal? StopPrice,
+        string? Note,
+        string? Confluence,
+        bool IsConfirmed,
+        long RecordedAt,
         // 同语境（缠论类别 × 周期）的经验可信度；指标信号不评级（可信度仅对缠论结构定义）。
         EvidenceBucket? Evidence);
 
@@ -38,8 +50,14 @@ internal static class WatchlistEndpoints
                 var logger = loggerFactory.CreateLogger("WatchlistEndpoints");
                 _ = Task.Run(async () =>
                 {
-                    try { await monitor.AnalyzeItemAsync(item, CancellationToken.None); }
-                    catch (Exception ex) { logger.LogWarning(ex, "监控条目预热失败 {Symbol}", item.Pair.Display); }
+                    try
+                    {
+                        await monitor.AnalyzeItemAsync(item, CancellationToken.None);
+                    }
+                    catch (Exception ex)
+                    {
+                        logger.LogWarning(ex, "监控条目预热失败 {Symbol}", item.Pair.Display);
+                    }
                 }, CancellationToken.None);
                 return Results.Ok(item);
             })
@@ -100,11 +118,15 @@ internal static class WatchlistEndpoints
                         await context.Response.Body.FlushAsync(requestAborted);
                     }
                 }
-                catch (OperationCanceledException) { /* 客户端断开或停机，属正常退出 */ }
+                catch (OperationCanceledException)
+                {
+                    /* 客户端断开或停机，属正常退出 */
+                }
                 finally
                 {
                     hub.Unsubscribe(id);
                 }
+
                 return Results.Empty;
             })
             .WithSummary("SSE：监控列表内新入库的已确认缠论买卖点（实时推送，替代前端轮询）");

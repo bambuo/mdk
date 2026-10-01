@@ -1,5 +1,3 @@
-using System.Text.Json.Serialization;
-
 namespace Mdk.Api.Domain;
 
 /// <summary>市场类型：现货 / U 本位合约（永续）。</summary>

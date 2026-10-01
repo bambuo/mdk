@@ -46,6 +46,7 @@ public sealed class WatchlistSignalBroadcaster : IDisposable
             if (_disposed) throw new ObjectDisposedException(nameof(WatchlistSignalBroadcaster));
             _clients[id] = channel;
         }
+
         reader = channel.Reader;
         return id;
     }
@@ -105,6 +106,7 @@ public sealed class WatchlistSignalBroadcaster : IDisposable
             foreach (var channel in _clients.Values) channel.Writer.TryComplete();
             _clients.Clear();
         }
+
         _signals.SignalRecorded -= OnSignalRecorded;
     }
 }

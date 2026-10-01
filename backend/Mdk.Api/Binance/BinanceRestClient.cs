@@ -51,12 +51,12 @@ public sealed class BinanceRestClient(
     private readonly Dictionary<MarketKind, DateTimeOffset> _exchangeInfoCachedAt = new();
 
 
-
     private string RestBaseUrl(MarketKind market) =>
         market == MarketKind.Futures ? options.Value.FuturesRestBaseUrl : options.Value.RestBaseUrl;
 
     /// <summary>拉取K线（币安数组套数组格式 → 归一化 Candle，时间为秒级）。现货与合约响应结构一致。</summary>
-    public async Task<Candle[]> GetKlinesAsync(MarketKind market, TradingPair pair, string interval, int limit, CancellationToken ct = default)
+    public async Task<Candle[]> GetKlinesAsync(MarketKind market, TradingPair pair, string interval, int limit,
+        CancellationToken ct = default)
     {
         var url = $"{market.ToRestPath()}/klines?symbol={pair.Symbol}&interval={interval}&limit={limit}";
         using var response = await SendAsync(market, url, ct);
@@ -79,7 +79,8 @@ public sealed class BinanceRestClient(
         var guard = 0;
         while (cursor <= endMs && guard++ < 200)
         {
-            var url = $"{market.ToRestPath()}/klines?symbol={pair.Symbol}&interval={interval}&startTime={cursor}&endTime={endMs}&limit={pageSize}";
+            var url =
+                $"{market.ToRestPath()}/klines?symbol={pair.Symbol}&interval={interval}&startTime={cursor}&endTime={endMs}&limit={pageSize}";
             using var response = await SendAsync(market, url, ct);
             var rows = await response.Content.ReadFromJsonAsync<JsonElement[][]>(cancellationToken: ct)
                        ?? throw new BinanceException(-1, "klines 返回为空");
@@ -87,11 +88,12 @@ public sealed class BinanceRestClient(
             var page = ParseKlines(rows);
             all.AddRange(page);
             var lastMs = rows[^1][0].GetInt64();
-            if (page.Length < pageSize) break;          // 已到区间末尾
-            if (lastMs <= cursor) break;                // 防死循环
+            if (page.Length < pageSize) break; // 已到区间末尾
+            if (lastMs <= cursor) break; // 防死循环
             cursor = lastMs + 1;
-            if (cursor <= endMs) await Task.Delay(120, ct);   // 分页间让出速率
+            if (cursor <= endMs) await Task.Delay(120, ct); // 分页间让出速率
         }
+
         return [.. all];
     }
 
@@ -109,6 +111,7 @@ public sealed class BinanceRestClient(
                 Close: Num(row[4]),
                 Volume: Num(row[5]));
         }
+
         return candles;
     }
 
@@ -117,9 +120,11 @@ public sealed class BinanceRestClient(
     {
         lock (_sync)
         {
-            if (_tickerCache.TryGetValue(market, out var cached) && DateTimeOffset.UtcNow - _tickerCachedAt[market] < TimeSpan.FromSeconds(30))
+            if (_tickerCache.TryGetValue(market, out var cached) &&
+                DateTimeOffset.UtcNow - _tickerCachedAt[market] < TimeSpan.FromSeconds(30))
                 return cached;
         }
+
         using var response = await SendAsync(market, $"{market.ToRestPath()}/ticker/24hr", ct);
         var raw = await response.Content.ReadFromJsonAsync<List<TickerRaw>>(cancellationToken: ct) ?? [];
         var tickers = raw
@@ -130,6 +135,7 @@ public sealed class BinanceRestClient(
             _tickerCache[market] = tickers;
             _tickerCachedAt[market] = DateTimeOffset.UtcNow;
         }
+
         return tickers;
     }
 
@@ -138,9 +144,11 @@ public sealed class BinanceRestClient(
     {
         lock (_sync)
         {
-            if (_exchangeInfoCache.TryGetValue(market, out var cached) && DateTimeOffset.UtcNow - _exchangeInfoCachedAt[market] < TimeSpan.FromHours(1))
+            if (_exchangeInfoCache.TryGetValue(market, out var cached) &&
+                DateTimeOffset.UtcNow - _exchangeInfoCachedAt[market] < TimeSpan.FromHours(1))
                 return cached;
         }
+
         using var response = await SendAsync(market, $"{market.ToRestPath()}/exchangeInfo", ct);
         var raw = await response.Content.ReadFromJsonAsync<ExchangeInfoRaw>(cancellationToken: ct)
                   ?? throw new BinanceException(-1, "exchangeInfo 返回为空");
@@ -158,11 +166,13 @@ public sealed class BinanceRestClient(
                 logger.LogWarning(ex, "跳过无法解析的交易对 {Symbol}", s.Symbol);
             }
         }
+
         lock (_sync)
         {
             _exchangeInfoCache[market] = infos;
             _exchangeInfoCachedAt[market] = DateTimeOffset.UtcNow;
         }
+
         return infos;
     }
 
@@ -179,6 +189,7 @@ public sealed class BinanceRestClient(
         {
             message = response.ReasonPhrase ?? "请求失败";
         }
+
         logger.LogWarning("币安请求失败 {Market} {Status}: {Body}", market, (int)response.StatusCode, message);
         throw new BinanceException((int)response.StatusCode, message);
     }
@@ -191,7 +202,10 @@ public sealed class BinanceRestClient(
     {
         [JsonPropertyName("symbol")] public string Symbol { get; set; } = "";
         [JsonPropertyName("lastPrice")] public string LastPrice { get; set; } = "0";
-        [JsonPropertyName("priceChangePercent")] public string PriceChangePercent { get; set; } = "0";
+
+        [JsonPropertyName("priceChangePercent")]
+        public string PriceChangePercent { get; set; } = "0";
+
         [JsonPropertyName("quoteVolume")] public string QuoteVolume { get; set; } = "0";
     }
 

@@ -32,28 +32,43 @@ public sealed class SignalEntry
     public MarketKind Market { get; set; }
     public TradingPair Pair { get; set; }
     public string Interval { get; set; } = "";
+
     public string Source { get; set; } = "";
+
     // 买卖点类别（缠论："1买"…"3卖"）；其他来源为 null。用于按语境给出经验可信度。
     public string? Kind { get; set; }
+
     public string Side { get; set; } = "";
+
     // 信号记账的K线时间（该根收盘后信号才可知，入场价取该根收盘价）。
     public long Time { get; set; }
+
     public decimal Price { get; set; }
+
     // 信号说明原文（含位点价位/触碰次数等，便于事后审计）。
     public string? Note { get; set; }
+
     public decimal? StopPrice { get; set; }
+
     // 结构参考价（缠论信号）：用于事后复核"入场是否已经追高"（滞后 ÷ 风险单位）。
     public decimal? ReferencePrice { get; set; }
+
     // 级别共振标签（aligned/counter/none，仅缠论信号）。
     public string? Confluence { get; set; }
+
     public bool IsConfirmed { get; set; }
+
     // 信号发生时的市场状态（用于按状态分组统计，如 ADX≥25 的趋势市 vs 震荡市）。
     public decimal? Adx { get; set; }
     public decimal? AtrPct { get; set; }
+
     public decimal? BandwidthPct { get; set; }
+
     // 联合打分（结构共振 + 技术指标，等权 0–6）；旧行/非缠论行为 null。
     public int? JointScore { get; set; }
+
     public long RecordedAt { get; set; }
+
     // 来源：live=实时分析路径写入；backfill=历史回填（事后一次性生成，统计时需区分）。
     public string Origin { get; set; } = "live";
     public SignalOutcome? Outcome { get; set; }
@@ -95,11 +110,13 @@ public sealed class SignalStore : IDisposable
             mode.CommandText = "PRAGMA journal_mode=WAL;";
             mode.ExecuteScalar();
         }
+
         using (var sync = _conn.CreateCommand())
         {
             sync.CommandText = "PRAGMA synchronous=NORMAL;";
             sync.ExecuteNonQuery();
         }
+
         CreateSchema();
         ImportLegacyJsonlIfEmpty();
     }
@@ -130,15 +147,15 @@ public sealed class SignalStore : IDisposable
         {
             using var cmd = _conn.CreateCommand();
             cmd.CommandText = """
-                INSERT OR IGNORE INTO signals
-                    (market, base_asset, quote_asset, interval, source, kind, side, signal_time, is_confirmed,
-                     price, stop_price, reference_price, note, confluence, adx, atr_pct,
-                     bandwidth_pct, origin, recorded_at, joint_score)
-                VALUES
-                    ($market, $base, $quote, $interval, $source, $kind, $side, $time, $confirmed,
-                     $price, $stop, $reference, $note, $confluence, $adx, $atrPct, $bandwidth,
-                     $origin, $recordedAt, $jointScore);
-                """;
+                              INSERT OR IGNORE INTO signals
+                                  (market, base_asset, quote_asset, interval, source, kind, side, signal_time, is_confirmed,
+                                   price, stop_price, reference_price, note, confluence, adx, atr_pct,
+                                   bandwidth_pct, origin, recorded_at, joint_score)
+                              VALUES
+                                  ($market, $base, $quote, $interval, $source, $kind, $side, $time, $confirmed,
+                                   $price, $stop, $reference, $note, $confluence, $adx, $atrPct, $bandwidth,
+                                   $origin, $recordedAt, $jointScore);
+                              """;
             cmd.Parameters.AddWithValue("$market", MarketKey(e.Market));
             cmd.Parameters.AddWithValue("$base", e.Pair.BaseAsset);
             cmd.Parameters.AddWithValue("$quote", e.Pair.QuoteAsset);
@@ -176,20 +193,22 @@ public sealed class SignalStore : IDisposable
         {
             using var cmd = _conn.CreateCommand();
             cmd.CommandText = """
-                UPDATE signals SET
-                    outcome_status = $status, outcome_ret = $ret, outcome_excess = $excess,
-                    outcome_mfe = $mfe, outcome_mae = $mae, outcome_stop_hit = $stopHit,
-                    outcome_net_positive = $netPositive, outcome_evaluated_at = $evaluatedAt
-                WHERE id = $id AND outcome_status IS NULL;
-                """;
+                              UPDATE signals SET
+                                  outcome_status = $status, outcome_ret = $ret, outcome_excess = $excess,
+                                  outcome_mfe = $mfe, outcome_mae = $mae, outcome_stop_hit = $stopHit,
+                                  outcome_net_positive = $netPositive, outcome_evaluated_at = $evaluatedAt
+                              WHERE id = $id AND outcome_status IS NULL;
+                              """;
             cmd.Parameters.AddWithValue("$id", id);
             cmd.Parameters.AddWithValue("$status", outcome.Status);
             cmd.Parameters.AddWithValue("$ret", ToText(outcome.Ret));
             cmd.Parameters.AddWithValue("$excess", ToText(outcome.Excess));
             cmd.Parameters.AddWithValue("$mfe", ToText(outcome.Mfe));
             cmd.Parameters.AddWithValue("$mae", ToText(outcome.Mae));
-            cmd.Parameters.AddWithValue("$stopHit", outcome.StopHit is null ? DBNull.Value : outcome.StopHit.Value ? 1 : 0);
-            cmd.Parameters.AddWithValue("$netPositive", outcome.NetPositive is null ? DBNull.Value : outcome.NetPositive.Value ? 1 : 0);
+            cmd.Parameters.AddWithValue("$stopHit",
+                outcome.StopHit is null ? DBNull.Value : outcome.StopHit.Value ? 1 : 0);
+            cmd.Parameters.AddWithValue("$netPositive",
+                outcome.NetPositive is null ? DBNull.Value : outcome.NetPositive.Value ? 1 : 0);
             cmd.Parameters.AddWithValue("$evaluatedAt", outcome.EvaluatedAt ?? (object)DBNull.Value);
             cmd.ExecuteNonQuery();
         }
@@ -208,11 +227,11 @@ public sealed class SignalStore : IDisposable
         {
             using var cmd = _conn.CreateCommand();
             cmd.CommandText = """
-                UPDATE signals SET joint_score = $score
-                WHERE market = $market AND base_asset = $base AND quote_asset = $quote AND interval = $interval
-                  AND source = $source AND side = $side AND signal_time = $time AND is_confirmed = $confirmed
-                  AND origin = $origin;
-                """;
+                              UPDATE signals SET joint_score = $score
+                              WHERE market = $market AND base_asset = $base AND quote_asset = $quote AND interval = $interval
+                                AND source = $source AND side = $side AND signal_time = $time AND is_confirmed = $confirmed
+                                AND origin = $origin;
+                              """;
             cmd.Parameters.AddWithValue("$market", MarketKey(market));
             cmd.Parameters.AddWithValue("$base", pair.BaseAsset);
             cmd.Parameters.AddWithValue("$quote", pair.QuoteAsset);
@@ -263,18 +282,20 @@ public sealed class SignalStore : IDisposable
                     _logger.LogWarning("台账存在无法识别的周期 {Interval}，其待评估信号本轮跳过", interval);
                     continue;
                 }
+
                 var cutoff = nowUnix - MarketIntervals.IntervalSeconds(interval) * horizonBars;
                 using var cmd = _conn.CreateCommand();
                 cmd.CommandText = SelectPrefix + """
-                     WHERE outcome_status IS NULL AND interval = $interval AND signal_time <= $cutoff
-                     ORDER BY signal_time LIMIT $limit;
-                    """;
+                                                  WHERE outcome_status IS NULL AND interval = $interval AND signal_time <= $cutoff
+                                                  ORDER BY signal_time LIMIT $limit;
+                                                 """;
                 cmd.Parameters.AddWithValue("$interval", interval);
                 cmd.Parameters.AddWithValue("$cutoff", cutoff);
                 cmd.Parameters.AddWithValue("$limit", perIntervalLimit);
                 // 历史数据里可能有锚定币行（规则上线前入库）：排除，避免无意义的K线拉取与统计污染
                 pending.AddRange(ReadAll(cmd).Where(e => !e.Pair.IsPegged));
             }
+
             return pending;
         }
     }
@@ -284,54 +305,54 @@ public sealed class SignalStore : IDisposable
     // ---- 内部：建表 / 读写映射 / 旧格式导入 ----
 
     private const string SelectPrefix = """
-        SELECT id, market, base_asset, quote_asset, interval, source, kind, side, signal_time, is_confirmed,
-               price, stop_price, reference_price, note, confluence, adx, atr_pct,
-               bandwidth_pct, origin, recorded_at,
-               outcome_status, outcome_ret, outcome_excess, outcome_mfe, outcome_mae,
-               outcome_stop_hit, outcome_net_positive, outcome_evaluated_at,
-               joint_score
-        FROM signals
-        """;
+                                        SELECT id, market, base_asset, quote_asset, interval, source, kind, side, signal_time, is_confirmed,
+                                               price, stop_price, reference_price, note, confluence, adx, atr_pct,
+                                               bandwidth_pct, origin, recorded_at,
+                                               outcome_status, outcome_ret, outcome_excess, outcome_mfe, outcome_mae,
+                                               outcome_stop_hit, outcome_net_positive, outcome_evaluated_at,
+                                               joint_score
+                                        FROM signals
+                                        """;
 
     private void CreateSchema()
     {
         using var cmd = _conn.CreateCommand();
         cmd.CommandText = """
-            CREATE TABLE IF NOT EXISTS signals (
-                id                   INTEGER PRIMARY KEY AUTOINCREMENT,
-                joint_score          INTEGER,
-                market               TEXT    NOT NULL,
-                base_asset           TEXT    NOT NULL,
-                quote_asset          TEXT    NOT NULL,
-                interval             TEXT    NOT NULL,
-                source               TEXT    NOT NULL,
-                kind                 TEXT,
-                side                 TEXT    NOT NULL,
-                signal_time          INTEGER NOT NULL,
-                is_confirmed         INTEGER NOT NULL CHECK (is_confirmed IN (0, 1)),
-                price                TEXT    NOT NULL,
-                stop_price           TEXT,
-                reference_price      TEXT,
-                note                 TEXT,
-                confluence           TEXT,
-                adx                  TEXT,
-                atr_pct              TEXT,
-                bandwidth_pct        TEXT,
-                origin               TEXT    NOT NULL,
-                recorded_at          INTEGER NOT NULL,
-                outcome_status       TEXT,
-                outcome_ret          TEXT,
-                outcome_excess       TEXT,
-                outcome_mfe          TEXT,
-                outcome_mae          TEXT,
-                outcome_stop_hit     INTEGER,
-                outcome_net_positive INTEGER,
-                outcome_evaluated_at INTEGER,
-                UNIQUE (market, base_asset, quote_asset, interval, source, side, signal_time, is_confirmed, origin)
-            );
-            CREATE INDEX IF NOT EXISTS ix_signals_pending ON signals (interval, signal_time) WHERE outcome_status IS NULL;
-            CREATE INDEX IF NOT EXISTS ix_signals_recorded ON signals (market, recorded_at);
-            """;
+                          CREATE TABLE IF NOT EXISTS signals (
+                              id                   INTEGER PRIMARY KEY AUTOINCREMENT,
+                              joint_score          INTEGER,
+                              market               TEXT    NOT NULL,
+                              base_asset           TEXT    NOT NULL,
+                              quote_asset          TEXT    NOT NULL,
+                              interval             TEXT    NOT NULL,
+                              source               TEXT    NOT NULL,
+                              kind                 TEXT,
+                              side                 TEXT    NOT NULL,
+                              signal_time          INTEGER NOT NULL,
+                              is_confirmed         INTEGER NOT NULL CHECK (is_confirmed IN (0, 1)),
+                              price                TEXT    NOT NULL,
+                              stop_price           TEXT,
+                              reference_price      TEXT,
+                              note                 TEXT,
+                              confluence           TEXT,
+                              adx                  TEXT,
+                              atr_pct              TEXT,
+                              bandwidth_pct        TEXT,
+                              origin               TEXT    NOT NULL,
+                              recorded_at          INTEGER NOT NULL,
+                              outcome_status       TEXT,
+                              outcome_ret          TEXT,
+                              outcome_excess       TEXT,
+                              outcome_mfe          TEXT,
+                              outcome_mae          TEXT,
+                              outcome_stop_hit     INTEGER,
+                              outcome_net_positive INTEGER,
+                              outcome_evaluated_at INTEGER,
+                              UNIQUE (market, base_asset, quote_asset, interval, source, side, signal_time, is_confirmed, origin)
+                          );
+                          CREATE INDEX IF NOT EXISTS ix_signals_pending ON signals (interval, signal_time) WHERE outcome_status IS NULL;
+                          CREATE INDEX IF NOT EXISTS ix_signals_recorded ON signals (market, recorded_at);
+                          """;
         cmd.ExecuteNonQuery();
         EnsureColumn("reference_price", "TEXT");
         EnsureColumn("kind", "TEXT");
@@ -347,9 +368,9 @@ public sealed class SignalStore : IDisposable
     {
         using var cmd = _conn.CreateCommand();
         cmd.CommandText = """
-            UPDATE signals SET kind = substr(note, 2, instr(note, ']') - 2)
-            WHERE kind IS NULL AND source = '缠论' AND note LIKE '[%]%';
-            """;
+                          UPDATE signals SET kind = substr(note, 2, instr(note, ']') - 2)
+                          WHERE kind IS NULL AND source = '缠论' AND note LIKE '[%]%';
+                          """;
         var updated = cmd.ExecuteNonQuery();
         if (updated > 0) _logger.LogInformation("台账按说明文本回填类别列 {Count} 行", updated);
     }
@@ -411,8 +432,10 @@ public sealed class SignalStore : IDisposable
                     EvaluatedAt = reader.IsDBNull(27) ? null : reader.GetInt32(27),
                 };
             }
+
             list.Add(entry);
         }
+
         return list;
     }
 
@@ -422,7 +445,8 @@ public sealed class SignalStore : IDisposable
     // decimal → TEXT：与 JSON 输出同一口径（八位小数、定点、无尾随零）。
     private static string ToText(decimal value) => DecimalJsonConverter.Format(value);
 
-    private static object ToText(decimal? value) => value is null ? DBNull.Value : DecimalJsonConverter.Format(value.Value);
+    private static object ToText(decimal? value) =>
+        value is null ? DBNull.Value : DecimalJsonConverter.Format(value.Value);
 
     private static decimal? FromText(string? text) =>
         string.IsNullOrEmpty(text) ? null : decimal.Parse(text, CultureInfo.InvariantCulture);
@@ -457,6 +481,7 @@ public sealed class SignalStore : IDisposable
                 skipped++;
                 continue;
             }
+
             if (legacy is null
                 || !MarketKindExtensions.TryParse(legacy.Market, out var market)
                 || !TradingPair.TryParse(legacy.Symbol, out var pair))
@@ -489,9 +514,10 @@ public sealed class SignalStore : IDisposable
             };
             if (!TryRecord(entry))
             {
-                skipped++;   // 自然键重复
+                skipped++; // 自然键重复
                 continue;
             }
+
             if (entry.Outcome is not null) MarkOutcome(entry.Id, entry.Outcome);
             pairs.Add(pair.Display);
             imported++;
@@ -546,7 +572,6 @@ public sealed record SignalSourceStats(
     decimal TopSymbolShare,
     // 其中来自历史回填的样本数（事后生成，参考价值低于在线样本）。
     int NBackfill);
-
 
 // 按市场状态/共振状态分组的绩效（用于判断信号的状态依赖性）。
 public sealed record SignalBucketStats(

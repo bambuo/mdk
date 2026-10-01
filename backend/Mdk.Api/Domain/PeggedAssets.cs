@@ -16,7 +16,8 @@ public static class PeggedAssets
         // 美元稳定币
         "USDT", "USDC", "FDUSD", "TUSD", "USDP", "BUSD", "DAI", "USDE", "USDS", "USD1", "XUSD", "USDY", "PYUSD", "USDD",
         // 法币
-        "EUR", "EURI", "AEUR", "GBP", "TRY", "BRL", "ARS", "JPY", "AUD", "IDRT", "NGN", "UAH", "PLN", "RON", "CZK", "MXN", "ZAR",
+        "EUR", "EURI", "AEUR", "GBP", "TRY", "BRL", "ARS", "JPY", "AUD", "IDRT", "NGN", "UAH", "PLN", "RON", "CZK",
+        "MXN", "ZAR",
     };
 
     /// <summary>是否为锚定币（大小写不敏感）。</summary>

@@ -110,9 +110,9 @@ internal static class RestEndpoints
             })
             .WithSummary("缠论结构 + 买卖点信号 + 指标序列（纯缠论）");
 
-        app.MapPost("/api/backfill/run", async (
+        app.MapPost("/api/backfill/run", (
                 string? market, int? days, string? symbols, string? intervals, bool? subLevel, string? until,
-                SignalBackfillService backfill, CancellationToken ct) =>
+                SignalBackfillService backfill) =>
             {
                 if (!MarketKindExtensions.TryParse(market, out var marketKind) || marketKind != MarketKind.Spot)
                     return BadRequest("历史回填目前仅支持现货（market=spot）");
@@ -135,7 +135,7 @@ internal static class RestEndpoints
                 }
 
                 var status = backfill.Status;
-                if (status.Running) return Results.Ok(status);   // 已有回填在跑，直接返回进度
+                if (status.Running) return Results.Ok(status); // 已有回填在跑，直接返回进度
                 _ = backfill.RunAsync(Math.Clamp(days ?? 90, 7, 365), symbolList, intervalList, CancellationToken.None,
                     subLevel ?? true, untilUnix);
                 return Results.Ok(backfill.Status);
@@ -157,8 +157,8 @@ internal static class RestEndpoints
                 var pool = store.Snapshot()
                     .Where(e => e.Market == marketKind
                                 && e.RecordedAt >= since
-                                && e.Source == "缠论"           // 精简为纯缠论：只统计缠论买卖点
-                                && !e.Pair.IsPegged            // 锚定币价格恒定，其样本没有交易含义
+                                && e.Source == "缠论" // 精简为纯缠论：只统计缠论买卖点
+                                && !e.Pair.IsPegged // 锚定币价格恒定，其样本没有交易含义
                                 && e.Outcome is { Status: "ok" })
                     // 同一信号可能先以「盘中预警」、再以「收盘确认」各记一条：统计时按信号本体去重，
                     // 优先保留确认版本，避免样本量虚增（否则预警存活率与绩效都会被重复计数污染）
@@ -169,12 +169,13 @@ internal static class RestEndpoints
                 {
                     // 交易对统一按值对象比较（接受 BTCUSDT / BTC-USDT / BTC/USDT 三种写法）
                     var raw = symbol.Trim().ToUpperInvariant().Replace("/", "").Replace("-", "");
-                    if (TradingPair.TryParse(raw, out var want)) pool = [..pool.Where(e => e.Pair == want)];
+                    if (TradingPair.TryParse(raw, out var want)) pool = [.. pool.Where(e => e.Pair == want)];
                 }
+
                 if (!string.IsNullOrWhiteSpace(interval))
                 {
                     var i = interval.Trim();
-                    pool = [..pool.Where(e => e.Interval == i)];
+                    pool = [.. pool.Where(e => e.Interval == i)];
                 }
 
                 SignalSourceStats? Summarize(string source, IReadOnlyList<SignalEntry> items)
@@ -245,7 +246,7 @@ internal static class RestEndpoints
 
     private static decimal Rate(IEnumerable<SignalEntry> items, Func<SignalEntry, bool> predicate)
     {
-        var list = items as IReadOnlyList<SignalEntry> ?? items.ToList();   // 物化一次，避免谓词/计数重复枚举
+        var list = items as IReadOnlyList<SignalEntry> ?? items.ToList(); // 物化一次，避免谓词/计数重复枚举
         return list.Count(predicate) / (decimal)list.Count;
     }
 

@@ -67,6 +67,7 @@ public sealed class SignalBackfillService(
             logger.LogInformation("历史回填已禁用（Backfill:RunOnStartup=false）");
             return;
         }
+
         try
         {
             await Task.Delay(TimeSpan.FromSeconds(Math.Max(0, _options.StartupDelaySeconds)), stoppingToken);
@@ -75,11 +76,13 @@ public sealed class SignalBackfillService(
         {
             return;
         }
+
         if (_options.Symbols.Length == 0 || _options.Intervals.Length == 0)
         {
             logger.LogInformation("历史回填跳过：未配置 Backfill:Symbols / Backfill:Intervals");
             return;
         }
+
         await RunAsync(_options.Days, _options.Symbols, _options.Intervals, stoppingToken);
     }
 
@@ -92,7 +95,7 @@ public sealed class SignalBackfillService(
         CancellationToken ct, bool subLevelConfirm = true, long? untilUnix = null)
     {
         if (!await _gate.WaitAsync(0, ct))
-            return _status;   // 已有回填在跑
+            return _status; // 已有回填在跑
 
         var total = symbols.Count * intervals.Count;
         var completed = 0;
@@ -121,16 +124,19 @@ public sealed class SignalBackfillService(
                         completed++;
                         continue;
                     }
+
                     if (pair.Value.IsPegged)
                     {
                         logger.LogInformation("回填跳过锚定币 {Symbol}（价格恒定，不构成分析标的）", pair.Value.Display);
                         completed++;
                         continue;
                     }
+
                     _status = _status with { Current = $"{pair.Value.Symbol} {interval}", Completed = completed };
                     try
                     {
-                        recorded += await SeedOneAsync(pair.Value, interval, subInterval, htfInterval, days, ct, subLevelConfirm, untilUnix);
+                        recorded += await SeedOneAsync(pair.Value, interval, subInterval, htfInterval, days, ct,
+                            subLevelConfirm, untilUnix);
                     }
                     catch (OperationCanceledException)
                     {
@@ -141,6 +147,7 @@ public sealed class SignalBackfillService(
                         logger.LogWarning(ex, "回填失败 {Symbol} {Interval}", pair.Value.Symbol, interval);
                         _status = _status with { LastError = $"{pair.Value.Symbol} {interval}: {ex.Message}" };
                     }
+
                     completed++;
                     _status = _status with { Completed = completed, SignalsRecorded = recorded };
                 }
@@ -160,6 +167,7 @@ public sealed class SignalBackfillService(
         {
             _gate.Release();
         }
+
         return _status;
     }
 
@@ -186,8 +194,10 @@ public sealed class SignalBackfillService(
         if (subInterval is not null)
         {
             var subBars = MarketIntervals.IntervalSeconds(subInterval);
-            sub = await rest.GetKlinesRangeAsync(MarketKind.Spot, pair, subInterval, fromSec - 300 * subBars, toSec, ct);
+            sub = await rest.GetKlinesRangeAsync(MarketKind.Spot, pair, subInterval, fromSec - 300 * subBars, toSec,
+                ct);
         }
+
         IReadOnlyList<Models.Candle>? htf = null;
         if (htfInterval is not null)
         {
@@ -210,27 +220,27 @@ public sealed class SignalBackfillService(
         foreach (var s in signals)
         {
             if (store.TryRecord(new SignalEntry
-            {
-                Market = MarketKind.Spot,
-                Pair = pair,
-                Interval = interval,
-                Source = "缠论",
-                Kind = s.Kind,
-                Side = s.Side,
-                Time = s.Time,
-                Price = s.Price,
-                Note = $"[{s.Kind}] {s.Note}",
-                StopPrice = s.StopPrice,
-                ReferencePrice = s.ReferencePrice,
-                Confluence = s.Confluence,
-                IsConfirmed = true,
-                Adx = s.Adx,
-                AtrPct = s.AtrPct,
-                BandwidthPct = s.BandwidthPct,
-                JointScore = s.JointScore,
-                RecordedAt = recordedAt,
-                Origin = origin,
-            }))
+                {
+                    Market = MarketKind.Spot,
+                    Pair = pair,
+                    Interval = interval,
+                    Source = "缠论",
+                    Kind = s.Kind,
+                    Side = s.Side,
+                    Time = s.Time,
+                    Price = s.Price,
+                    Note = $"[{s.Kind}] {s.Note}",
+                    StopPrice = s.StopPrice,
+                    ReferencePrice = s.ReferencePrice,
+                    Confluence = s.Confluence,
+                    IsConfirmed = true,
+                    Adx = s.Adx,
+                    AtrPct = s.AtrPct,
+                    BandwidthPct = s.BandwidthPct,
+                    JointScore = s.JointScore,
+                    RecordedAt = recordedAt,
+                    Origin = origin,
+                }))
             {
                 inserted++;
             }
@@ -242,7 +252,8 @@ public sealed class SignalBackfillService(
             }
         }
 
-        logger.LogInformation("回填 {Symbol} {Interval}（次级别确认={Sub}）：窗口 {Bars} 根，产出信号 {Total} 个（新增 {Inserted} 条，补打分 {Scored} 条）",
+        logger.LogInformation(
+            "回填 {Symbol} {Interval}（次级别确认={Sub}）：窗口 {Bars} 根，产出信号 {Total} 个（新增 {Inserted} 条，补打分 {Scored} 条）",
             pair.Symbol, interval, subLevelConfirm, main.Length, signals.Count, inserted, scored);
         return inserted;
     }

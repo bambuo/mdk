@@ -69,6 +69,7 @@ public sealed class WatchlistMonitorService(
             logger.LogInformation("监控服务已禁用（Signal:WatchlistEnabled=false）");
             return;
         }
+
         var interval = TimeSpan.FromSeconds(Math.Max(30, _options.WatchlistIntervalSeconds));
         logger.LogInformation("监控服务已启动（每 {Seconds}s 分析监控列表）", interval.TotalSeconds);
         while (!stoppingToken.IsCancellationRequested)
@@ -85,6 +86,7 @@ public sealed class WatchlistMonitorService(
             {
                 logger.LogWarning(ex, "监控列表分析循环失败");
             }
+
             try
             {
                 await Task.Delay(interval, stoppingToken);
@@ -140,11 +142,13 @@ public sealed class WatchlistMonitorService(
                 if (_latest.TryGetValue(Key(item.Market, item.Pair, itv), out var hit))
                     snaps.Add(ToSnapshot(itv, hit.Result, hit.At));
             }
+
             views.Add(new WatchlistItemView(
                 item.Market.ToString().ToLowerInvariant(),
                 item.Pair.Symbol, item.Pair.BaseAsset, item.Pair.QuoteAsset,
                 item.Intervals, item.Enabled, item.CreatedAt, snaps, Resonance(snaps)));
         }
+
         return views;
     }
 
@@ -157,6 +161,7 @@ public sealed class WatchlistMonitorService(
         {
             barsSince = (int)((r.LastTime - t) / barSeconds);
         }
+
         return new WatchlistIntervalSnapshot(
             interval, r.LastPrice, r.LastTime,
             chan?.LastStrokeDirection ?? "none",
@@ -176,18 +181,22 @@ public sealed class WatchlistMonitorService(
         if (e20 is { } a && e50 is { } b && e200 is { } c)
         {
             var tone = a > b && b > c ? "bull" : a < b && b < c ? "bear" : "neutral";
-            states.Add(new WatchlistIndicatorState("EMA", tone == "bull" ? "多头排列" : tone == "bear" ? "空头排列" : "纠缠", tone));
+            var emaLabel = tone switch { "bull" => "多头排列", "bear" => "空头排列", _ => "纠缠" };
+            states.Add(new WatchlistIndicatorState("EMA", emaLabel, tone));
         }
+
         if (Last(r, "rsi14") is { } rsi)
         {
             var (label, tone) = rsi >= 70m ? ("超买", "bear") : rsi <= 30m ? ("超卖", "bull") : ("中性", "neutral");
             states.Add(new WatchlistIndicatorState("RSI", $"{label} {rsi:0}", tone));
         }
+
         var hist = r.Macd.Hist.LastOrDefault(v => v is not null);
         if (hist is { } h)
         {
             states.Add(new WatchlistIndicatorState("MACD", h >= 0m ? "多头动能" : "空头动能", h >= 0m ? "bull" : "bear"));
         }
+
         return states;
     }
 
@@ -203,7 +212,7 @@ public sealed class WatchlistMonitorService(
     private static string Resonance(IReadOnlyList<WatchlistIntervalSnapshot> snaps)
     {
         var fresh = snaps
-            .Where(s => s.LastSide is not null && s.BarsSinceSignal is { } b && b <= ResonanceFreshBars)
+            .Where(s => s.LastSide is not null && s.BarsSinceSignal is <= ResonanceFreshBars)
             .ToList();
         if (fresh.Count == 0) return snaps.Count == 0 ? "pending" : "none";
         if (fresh.Count == 1) return "none";

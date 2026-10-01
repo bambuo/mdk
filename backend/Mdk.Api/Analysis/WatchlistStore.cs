@@ -55,10 +55,12 @@ public sealed class WatchlistStore : IDisposable
             {
                 if (!MarketKindExtensions.TryParse(reader.GetString(0), out var market)) continue;
                 var pair = TradingPair.From(reader.GetString(1), reader.GetString(2));
-                var intervals = NormalizeIntervals(reader.GetString(3).Split(',', StringSplitOptions.RemoveEmptyEntries));
+                var intervals =
+                    NormalizeIntervals(reader.GetString(3).Split(',', StringSplitOptions.RemoveEmptyEntries));
                 if (intervals.Count == 0) continue;
                 items.Add(new WatchItem(market, pair, intervals, reader.GetInt64(4) != 0, reader.GetInt64(5)));
             }
+
             return items;
         }
     }
@@ -72,11 +74,11 @@ public sealed class WatchlistStore : IDisposable
             using (var cmd = _conn.CreateCommand())
             {
                 cmd.CommandText = """
-                    INSERT INTO watchlist (market, base_asset, quote_asset, intervals, enabled, created_at)
-                    VALUES ($market, $base, $quote, $intervals, 1, $created)
-                    ON CONFLICT (market, base_asset, quote_asset)
-                    DO UPDATE SET intervals = excluded.intervals;
-                    """;
+                                  INSERT INTO watchlist (market, base_asset, quote_asset, intervals, enabled, created_at)
+                                  VALUES ($market, $base, $quote, $intervals, 1, $created)
+                                  ON CONFLICT (market, base_asset, quote_asset)
+                                  DO UPDATE SET intervals = excluded.intervals;
+                                  """;
                 cmd.Parameters.AddWithValue("$market", Market(market));
                 cmd.Parameters.AddWithValue("$base", pair.BaseAsset);
                 cmd.Parameters.AddWithValue("$quote", pair.QuoteAsset);
@@ -84,6 +86,7 @@ public sealed class WatchlistStore : IDisposable
                 cmd.Parameters.AddWithValue("$created", DateTimeOffset.UtcNow.ToUnixTimeSeconds());
                 cmd.ExecuteNonQuery();
             }
+
             return ReadOne(market, pair) ?? new WatchItem(market, pair, normalized, true, 0);
         }
     }
@@ -108,12 +111,13 @@ public sealed class WatchlistStore : IDisposable
             using (var cmd = _conn.CreateCommand())
             {
                 cmd.CommandText = """
-                    UPDATE watchlist SET enabled = 1 - enabled
-                    WHERE market = $market AND base_asset = $base AND quote_asset = $quote;
-                    """;
+                                  UPDATE watchlist SET enabled = 1 - enabled
+                                  WHERE market = $market AND base_asset = $base AND quote_asset = $quote;
+                                  """;
                 AddKey(cmd, market, pair);
                 if (cmd.ExecuteNonQuery() == 0) return null;
             }
+
             return ReadOne(market, pair)?.Enabled;
         }
     }
@@ -140,17 +144,17 @@ public sealed class WatchlistStore : IDisposable
     }
 
     private void CreateSchema() => Exec("""
-        CREATE TABLE IF NOT EXISTS watchlist (
-            id           INTEGER PRIMARY KEY AUTOINCREMENT,
-            market       TEXT    NOT NULL,
-            base_asset   TEXT    NOT NULL,
-            quote_asset  TEXT    NOT NULL,
-            intervals    TEXT    NOT NULL,
-            enabled      INTEGER NOT NULL DEFAULT 1 CHECK (enabled IN (0, 1)),
-            created_at   INTEGER NOT NULL,
-            UNIQUE (market, base_asset, quote_asset)
-        );
-        """);
+                                        CREATE TABLE IF NOT EXISTS watchlist (
+                                            id           INTEGER PRIMARY KEY AUTOINCREMENT,
+                                            market       TEXT    NOT NULL,
+                                            base_asset   TEXT    NOT NULL,
+                                            quote_asset  TEXT    NOT NULL,
+                                            intervals    TEXT    NOT NULL,
+                                            enabled      INTEGER NOT NULL DEFAULT 1 CHECK (enabled IN (0, 1)),
+                                            created_at   INTEGER NOT NULL,
+                                            UNIQUE (market, base_asset, quote_asset)
+                                        );
+                                        """);
 
     private void Exec(string sql)
     {

@@ -25,7 +25,6 @@ public sealed class KlineStreamService(
     private readonly Dictionary<string, Upstream> _streams = new(StringComparer.Ordinal);
 
 
-
     /// <summary>订阅某市场某交易对某周期的实时K线；返回的 IDisposable 用于取消订阅。</summary>
     public IDisposable Subscribe(MarketKind market, TradingPair pair, string interval, Action<KlineUpdate> onKline)
     {
@@ -39,7 +38,8 @@ public sealed class KlineStreamService(
             if (!_streams.TryGetValue(key, out var existing) || existing.IsClosing)
             {
                 if (existing is not null) _streams.Remove(key);
-                var wsBase = (market == MarketKind.Futures ? options.Value.FuturesWsBaseUrl : options.Value.WsBaseUrl).TrimEnd('/');
+                var wsBase = (market == MarketKind.Futures ? options.Value.FuturesWsBaseUrl : options.Value.WsBaseUrl)
+                    .TrimEnd('/');
                 var url = $"{wsBase}/ws/{streamKey}";
                 var created = new Upstream(key, url, market, pair, interval, rest, logger);
                 created.Closed = () =>
@@ -54,9 +54,11 @@ public sealed class KlineStreamService(
                 existing = created;
                 _streams[key] = created;
             }
+
             existing.AddRef();
             upstream = existing;
         }
+
         upstream.AddHandler(onKline);
         upstream.EnsureStarted();
         return new Subscription(upstream, onKline);
@@ -107,7 +109,8 @@ public sealed class KlineStreamService(
         /// <summary>是否已决定关闭（空闲超时）；为 true 时不可再被订阅，否则订阅方永远收不到数据。</summary>
         public bool IsClosing => _closing;
 
-        public Upstream(string key, string url, MarketKind market, TradingPair pair, string interval, BinanceRestClient rest, ILogger logger)
+        public Upstream(string key, string url, MarketKind market, TradingPair pair, string interval,
+            BinanceRestClient rest, ILogger logger)
         {
             _key = key;
             _url = new Uri(url);
@@ -148,6 +151,7 @@ public sealed class KlineStreamService(
                             // 在锁内置位：此后新建订阅不会再复用本上游（见 Subscribe 的 IsClosing 判断）
                             _closing = true;
                         }
+
                         _logger.LogInformation("K线流空闲关闭: {Key}", _key);
                         Closed?.Invoke();
                         _ = DisposeAsync();
@@ -208,16 +212,19 @@ public sealed class KlineStreamService(
                 {
                     await Task.Delay(PollInterval, ct);
                     var lastWs = Interlocked.Read(ref _lastWsMessageTicks);
-                    var silent = lastWs == 0 || DateTimeOffset.UtcNow - new DateTimeOffset(lastWs, TimeSpan.Zero) > WsSilenceThreshold;
+                    var silent = lastWs == 0 || DateTimeOffset.UtcNow - new DateTimeOffset(lastWs, TimeSpan.Zero) >
+                        WsSilenceThreshold;
                     if (!silent)
                     {
                         _usingRestFallback = false;
                         continue;
                     }
+
                     if (!_usingRestFallback)
                     {
                         _usingRestFallback = true;
-                        _logger.LogWarning("K线上游 {Key} 静默超过 {Seconds}s，启用 REST 轮询兜底", _key, WsSilenceThreshold.TotalSeconds);
+                        _logger.LogWarning("K线上游 {Key} 静默超过 {Seconds}s，启用 REST 轮询兜底", _key,
+                            WsSilenceThreshold.TotalSeconds);
                     }
 
                     var candles = await _rest.GetKlinesAsync(_market, _pair, _interval, 2, ct);
@@ -226,16 +233,19 @@ public sealed class KlineStreamService(
                     var previousTime = Interlocked.Read(ref _lastCandleTime);
 
                     // 若已换到新K线，先把上一根以收盘态补发（触发分析重算）
-                    if (previousTime != 0 && latest.Time > previousTime && candles.Length >= 2 && candles[0].Time == previousTime)
+                    if (previousTime != 0 && latest.Time > previousTime && candles.Length >= 2 &&
+                        candles[0].Time == previousTime)
                     {
                         var closed = candles[0];
                         Dispatch(new KlineUpdate(_market, _pair, _interval,
-                            closed.Time, closed.Open, closed.High, closed.Low, closed.Close, closed.Volume, IsFinal: true));
+                            closed.Time, closed.Open, closed.High, closed.Low, closed.Close, closed.Volume,
+                            IsFinal: true));
                     }
 
                     Interlocked.Exchange(ref _lastCandleTime, latest.Time);
                     Dispatch(new KlineUpdate(_market, _pair, _interval,
-                        latest.Time, latest.Open, latest.High, latest.Low, latest.Close, latest.Volume, IsFinal: false));
+                        latest.Time, latest.Open, latest.High, latest.Low, latest.Close, latest.Volume,
+                        IsFinal: false));
                 }
             }
             catch (OperationCanceledException)
@@ -269,6 +279,7 @@ public sealed class KlineStreamService(
                         Interlocked.Exchange(ref _lastWsMessageTicks, DateTimeOffset.UtcNow.UtcTicks);
                         ParseAndDispatch(message);
                     }
+
                     _logger.LogWarning("币安K线流被远端关闭: {Key}", _key);
                 }
                 catch (OperationCanceledException) when (ct.IsCancellationRequested)
@@ -288,6 +299,7 @@ public sealed class KlineStreamService(
                 {
                     break;
                 }
+
                 backoff = TimeSpan.FromTicks(Math.Min(backoff.Ticks * 2, TimeSpan.FromSeconds(30).Ticks));
             }
         }
@@ -349,6 +361,7 @@ public sealed class KlineStreamService(
             {
                 // 重连/轮询循环被取消属预期
             }
+
             _cts.Dispose();
         }
     }

@@ -110,7 +110,8 @@ public static class StructurePositionCalculator
         {
             pivotStrokes = p.StrokeCount;
             var startStroke = p.StartStrokeIndex >= 0 && p.StartStrokeIndex < result.Strokes.Count
-                ? result.Strokes[p.StartStrokeIndex] : default;
+                ? result.Strokes[p.StartStrokeIndex]
+                : default;
             var startIdx = startStroke.StartBarIndex;
             pivotBars = startIdx >= 0 && startIdx <= lastIndex ? lastIndex - startIdx : 0;
 
@@ -128,7 +129,8 @@ public static class StructurePositionCalculator
         }
 
         decimal? edgeDistanceAtr = null;
-        if (pivot is { } pp && edgeDistancePct is not null && atr.Length > lastIndex && atr[lastIndex] is { } a && a > 0m)
+        if (pivot is { } pp && edgeDistancePct is not null && atr.Length > lastIndex && atr[lastIndex] is { } a &&
+            a > 0m)
         {
             var edge = last > pp.Zg ? pp.Zg : pp.Zd;
             edgeDistanceAtr = Math.Abs(last - edge) / a;
@@ -237,6 +239,7 @@ public static class StructurePositionCalculator
         {
             parts.Add(barsSince == 0 ? $"最近买卖点 {kind}（本根）" : $"最近买卖点 {kind}（{barsSince} 根前）");
         }
+
         if (stopDistancePct is { } sd)
         {
             parts.Add($"距其止损参考 {sd * 100m:0.##}%" +
@@ -257,7 +260,8 @@ public static class StructurePositionCalculator
     private static int IndexOfTime(IReadOnlyList<Candle> candles, long time)
     {
         for (var i = candles.Count - 1; i >= 0; i--)
-            if (candles[i].Time == time) return i;
+            if (candles[i].Time == time)
+                return i;
         return -1;
     }
 }

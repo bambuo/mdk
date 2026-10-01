@@ -19,7 +19,9 @@ public sealed class AnalysisService(
         _evidenceCache = new();
 
     private readonly Chan.ChanOptions _chanOptions = chanOptions.Value;
-    private readonly ConcurrentDictionary<string, (IReadOnlyList<Models.Candle> Candles, DateTimeOffset At)> _htfCache = new();
+
+    private readonly ConcurrentDictionary<string, (IReadOnlyList<Models.Candle> Candles, DateTimeOffset At)> _htfCache =
+        new();
 
     public async Task<AnalysisResult> AnalyzeAsync(
         MarketKind market, TradingPair pair, string interval, int limit, CancellationToken ct = default)
@@ -135,7 +137,7 @@ public sealed class AnalysisService(
         var pool = store.Snapshot()
             .Where(e => e.Market == market
                         && e.Interval == interval
-                        && e.Source == "缠论"       // 精简为纯缠论：历史台账里的 EMA/RSI/MACD/结构 样本不再进入可信度
+                        && e.Source == "缠论" // 精简为纯缠论：历史台账里的 EMA/RSI/MACD/结构 样本不再进入可信度
                         && !e.Pair.IsPegged
                         && e.Outcome is { Status: "ok" })
             // 同一信号可能先记「盘中预警」再记「收盘确认」：按信号本体去重，优先确认版本
@@ -145,7 +147,7 @@ public sealed class AnalysisService(
 
         var buckets = pool
             .GroupBy(e => e.Kind)
-            .Select(g => EvidenceRules.Build(g.Key, interval, [..g]))
+            .Select(g => EvidenceRules.Build(g.Key, interval, [.. g]))
             .OrderByDescending(b => b.NEpisodes)
             .ToList();
 
@@ -159,11 +161,11 @@ public sealed class AnalysisService(
     {
         var key = $"lower|{market}|{pair.Symbol}|{lowerInterval}";
         var lowerSeconds = MarketIntervals.IntervalSeconds(lowerInterval);
-        var warmup = _chanOptions.LowerLevelMinBars * lowerSeconds;   // 次级别自身也需要预热才能形成结构
+        var warmup = _chanOptions.LowerLevelMinBars * lowerSeconds; // 次级别自身也需要预热才能形成结构
         var fromSec = displayFromTime - warmup;
 
         if (_htfCache.TryGetValue(key, out var hit) && DateTimeOffset.UtcNow - hit.At < HtfCacheTtl
-            && hit.Candles.Count > 0 && hit.Candles[0].Time <= fromSec)
+                                                    && hit.Candles.Count > 0 && hit.Candles[0].Time <= fromSec)
         {
             return hit.Candles;
         }
@@ -174,7 +176,8 @@ public sealed class AnalysisService(
         return candles;
     }
 
-    private async Task<IReadOnlyList<Models.Candle>> GetSubLevelCachedAsync(MarketKind market, TradingPair pair, string subInterval, CancellationToken ct)
+    private async Task<IReadOnlyList<Models.Candle>> GetSubLevelCachedAsync(MarketKind market, TradingPair pair,
+        string subInterval, CancellationToken ct)
     {
         var key = $"sub|{market}|{pair.Symbol}|{subInterval}";
         if (_htfCache.TryGetValue(key, out var hit) && DateTimeOffset.UtcNow - hit.At < HtfCacheTtl)
@@ -186,7 +189,8 @@ public sealed class AnalysisService(
         return candles;
     }
 
-    private async Task<IReadOnlyList<Models.Candle>> GetHtfCachedAsync(MarketKind market, TradingPair pair, string htfInterval, CancellationToken ct)
+    private async Task<IReadOnlyList<Models.Candle>> GetHtfCachedAsync(MarketKind market, TradingPair pair,
+        string htfInterval, CancellationToken ct)
     {
         var key = $"{market}|{pair.Symbol}|{htfInterval}";
         if (_htfCache.TryGetValue(key, out var hit) && DateTimeOffset.UtcNow - hit.At < HtfCacheTtl)

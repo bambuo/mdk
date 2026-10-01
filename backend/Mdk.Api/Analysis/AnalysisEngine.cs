@@ -75,9 +75,12 @@ public static class AnalysisEngine
             {
                 var chanCloses = chanWindow.Select(c => c.Close).ToArray();
                 chanHist = Macd.Compute(chanCloses).Hist;
-                chanAtr = Atr.Compute(chanWindow.Select(c => c.High).ToArray(), chanWindow.Select(c => c.Low).ToArray(), chanCloses, 14);
+                chanAtr = Atr.Compute(chanWindow.Select(c => c.High).ToArray(), chanWindow.Select(c => c.Low).ToArray(),
+                    chanCloses, 14);
             }
-            var raw = Chan.ChanAnalyzer.Analyze(chanWindow, chanHist, chanAtr, chanOpt, subLevelCandles, subLevelInterval);
+
+            var raw = Chan.ChanAnalyzer.Analyze(chanWindow, chanHist, chanAtr, chanOpt, subLevelCandles,
+                subLevelInterval);
             chanResult = chanOffset == 0 ? raw : AlignToDisplayWindow(raw, chanOffset);
         }
 
@@ -89,9 +92,11 @@ public static class AnalysisEngine
         {
             var htfCloses = htfForChan.Select(c => c.Close).ToArray();
             var htfHist = Macd.Compute(htfCloses).Hist;
-            var htfAtr = Atr.Compute(htfForChan.Select(c => c.High).ToArray(), htfForChan.Select(c => c.Low).ToArray(), htfCloses, 14);
+            var htfAtr = Atr.Compute(htfForChan.Select(c => c.High).ToArray(), htfForChan.Select(c => c.Low).ToArray(),
+                htfCloses, 14);
             htfChan = Chan.ChanAnalyzer.Analyze(htfForChan, htfHist, htfAtr, chanOpt, candles, interval);
         }
+
         var confluenceWindow = chanOpt.ConfluenceWindowBars * MarketIntervals.IntervalSeconds(htfInterval ?? interval);
         var confluenceTags = chanResult is null
             ? new Dictionary<(long, string), string>()
@@ -142,7 +147,6 @@ public static class AnalysisEngine
                     JointScore: jointScore);
             }).ToList();
         // 精简为纯缠论：信号只有缠论买卖点（EMA/RSI/MACD/结构 已降为图表指标，不再产生信号）
-        var allSignals = chanSignals;
 
         // 多级别结构（高周期 / 本级别 / 次级别）：同一张图叠加显示，并标注本级别中枢的级别归属
         IReadOnlyList<ChanLevelStructure>? chanLevels = null;
@@ -163,9 +167,11 @@ public static class AnalysisEngine
                 lowerChan = Chan.ChanAnalyzer.Analyze(
                     lowerLevelCandles,
                     Macd.Compute(ltfCloses).Hist,
-                    Atr.Compute(lowerLevelCandles.Select(c => c.High).ToArray(), lowerLevelCandles.Select(c => c.Low).ToArray(), ltfCloses, 14),
+                    Atr.Compute(lowerLevelCandles.Select(c => c.High).ToArray(),
+                        lowerLevelCandles.Select(c => c.Low).ToArray(), ltfCloses, 14),
                     chanOpt.Clone(requireSubLevelConfirm: false));
             }
+
             var lowerPivots = lowerChan is not null && lowerLevelCandles is not null
                 ? Chan.ChanLevelMapper.ToPivotInfos(lowerLevelCandles, lowerChan, displayFrom, displayTo, 30)
                 : [];
@@ -188,13 +194,16 @@ public static class AnalysisEngine
                 chanLevelList.Add(new ChanLevelStructure("higher", htfInterval, higherPivots,
                     LastDirection(htfChan), htfChan.Points.Count, Chan.ChanLevelMapper.CoverageFromTime(htfCandles)));
             }
+
             chanLevelList.Add(new ChanLevelStructure("primary", interval, annotatedPrimaryPivots,
                 LastDirection(chanResult), chanResult.Points.Count, Chan.ChanLevelMapper.CoverageFromTime(candles)));
             if (lowerChan is not null && lowerLevelCandles is not null && lowerLevelInterval is not null)
             {
                 chanLevelList.Add(new ChanLevelStructure("lower", lowerLevelInterval, lowerPivots,
-                    LastDirection(lowerChan), lowerChan.Points.Count, Chan.ChanLevelMapper.CoverageFromTime(lowerLevelCandles)));
+                    LastDirection(lowerChan), lowerChan.Points.Count,
+                    Chan.ChanLevelMapper.CoverageFromTime(lowerLevelCandles)));
             }
+
             chanLevels = chanLevelList;
         }
 
@@ -226,13 +235,15 @@ public static class AnalysisEngine
             candles[^1].Close,
             trend,
             levels,
-            allSignals,
+            chanSignals,
             series,
             new MacdSeries(ToNullable(macd.Dif), ToNullable(macd.Dea), ToNullable(macd.Hist)),
             chanResult is null
                 ? null
                 : BuildChanSummary(candles, chanResult,
-                    htfChan is null || htfInterval is null ? null : BuildHigherContext(htfCandles!, htfChan, htfInterval),
+                    htfChan is null || htfInterval is null
+                        ? null
+                        : BuildHigherContext(htfCandles!, htfChan, htfInterval),
                     annotatedPrimaryPivots,
                     BuildStructurePosition(candles, chanResult, atr, chanLevels)),
             chanLevels);
@@ -348,21 +359,24 @@ public static class AnalysisEngine
             EndBarIndex = s.EndBarIndex - offset,
             StableFromBarIndex = s.StableFromBarIndex is { } b ? b - offset : null,
         };
+
         Chan.ChanFractal ShiftFractal(Chan.ChanFractal f) => f with
         {
             BarIndex = f.BarIndex - offset,
             ConfirmBarIndex = f.ConfirmBarIndex - offset,
         };
+
         Chan.ChanBuySellPoint ShiftPoint(Chan.ChanBuySellPoint p) => p with
         {
             ReferenceBarIndex = p.ReferenceBarIndex - offset,
         };
+
         return raw with
         {
             Series = series,
-            Strokes = [..raw.Strokes.Select(Shift)],
-            Fractals = [..raw.Fractals.Select(ShiftFractal)],
-            Points = [..raw.Points.Select(ShiftPoint)],
+            Strokes = [.. raw.Strokes.Select(Shift)],
+            Fractals = [.. raw.Fractals.Select(ShiftFractal)],
+            Points = [.. raw.Points.Select(ShiftPoint)],
         };
     }
 
@@ -378,7 +392,8 @@ public static class AnalysisEngine
     private static int BarIndexOf(IReadOnlyList<Candle> candles, long time)
     {
         for (var i = candles.Count - 1; i >= 0; i--)
-            if (candles[i].Time == time) return i;
+            if (candles[i].Time == time)
+                return i;
         return candles.Count - 1;
     }
 
@@ -516,9 +531,11 @@ public static class SupportResistance
                 if (candles[i].Low >= candles[i - k].Low || candles[i].Low >= candles[i + k].Low) isLow = false;
                 if (!isHigh && !isLow) break;
             }
+
             if (isHigh) swings.Add(new SwingPoint(i, candles[i].High, true));
             if (isLow) swings.Add(new SwingPoint(i, candles[i].Low, false));
         }
+
         return swings;
     }
 
@@ -546,6 +563,7 @@ public static class SupportResistance
                 merged = true;
                 break;
             }
+
             if (!merged) clustered.Add((price, 1));
         }
 
