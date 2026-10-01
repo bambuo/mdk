@@ -4,7 +4,7 @@ using Mdk.Api.Domain;
 
 namespace Mdk.Api.Endpoints;
 
-/// <summary>监控列表（用户指定、持久化）与监控页所需的数据。</summary>
+// 监控列表（用户指定、持久化）与监控页所需的数据。
 internal static class WatchlistEndpoints
 {
     public sealed record AddRequest(string? Market, string? Symbol, string[]? Intervals);
@@ -13,7 +13,7 @@ internal static class WatchlistEndpoints
         string Market, string Symbol, string BaseAsset, string QuoteAsset,
         string Interval, string Source, string? Kind, string Side, long Time, decimal Price,
         decimal? StopPrice, string? Note, string? Confluence, bool IsConfirmed, long RecordedAt,
-        /// <summary>同语境（缠论类别 × 周期）的经验可信度；指标信号不评级（可信度仅对缠论结构定义）。</summary>
+        // 同语境（缠论类别 × 周期）的经验可信度；指标信号不评级（可信度仅对缠论结构定义）。
         EvidenceBucket? Evidence);
 
     public static void Map(WebApplication app)
@@ -85,7 +85,7 @@ internal static class WatchlistEndpoints
                     await context.Response.Body.WriteAsync(": connected\n\n"u8.ToArray(), requestAborted);
                     await context.Response.Body.FlushAsync(requestAborted);
 
-                    var readTask = Task.Run(async () =>
+                    _ = Task.Run(async () =>
                     {
                         await foreach (var payload in reader.ReadAllAsync(requestAborted))
                         {

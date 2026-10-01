@@ -92,7 +92,7 @@ public sealed class BinanceRestClient(
             cursor = lastMs + 1;
             if (cursor <= endMs) await Task.Delay(120, ct);   // 分页间让出速率
         }
-        return all.ToArray();
+        return [.. all];
     }
 
     private static Candle[] ParseKlines(JsonElement[][] rows)

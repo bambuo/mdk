@@ -8,26 +8,26 @@ namespace Mdk.Api.Analysis;
 /// 而不是启发式分数。样本不足时 <see cref="Sufficient"/> 为 false，界面必须显示"样本不足"而非给出胜率。
 /// </summary>
 public sealed record EvidenceBucket(
-    /// <summary>买卖点类别（如 "3买"）。精简为纯缠论后不再需要来源维度。</summary>
+    // 买卖点类别（如 "3买"）。精简为纯缠论后不再需要来源维度。
     string? Kind,
     string Interval,
-    /// <summary>原始样本数。</summary>
+    // 原始样本数。
     int N,
-    /// <summary>独立波次（同标的/周期/方向，间隔 ≤24 根归为一波）——统计显著性的有效样本量。</summary>
+    // 独立波次（同标的/周期/方向，间隔 ≤24 根归为一波）——统计显著性的有效样本量。
     int NEpisodes,
-    /// <summary>波次数是否达到可给出胜率的最低要求。</summary>
+    // 波次数是否达到可给出胜率的最低要求。
     bool Sufficient,
-    /// <summary>经验胜率（收益 > 0 的比例，波次口径）。</summary>
+    // 经验胜率（收益 > 0 的比例，波次口径）。
     decimal WinRate,
-    /// <summary>胜率的 95% Wilson 区间下界。</summary>
+    // 胜率的 95% Wilson 区间下界。
     decimal WinRateLow,
-    /// <summary>胜率的 95% Wilson 区间上界。</summary>
+    // 胜率的 95% Wilson 区间上界。
     decimal WinRateHigh,
-    /// <summary>扣费后为正的比例（波次口径）。</summary>
+    // 扣费后为正的比例（波次口径）。
     decimal NetPositiveRate,
-    /// <summary>中位超额（剔除同期市场漂移后），比均值抗极值。</summary>
+    // 中位超额（剔除同期市场漂移后），比均值抗极值。
     decimal MedianExcess,
-    /// <summary>典型风险单位（入场到结构失效位的距离占入场价比例）中位数——用于判断止损是否过远。</summary>
+    // 典型风险单位（入场到结构失效位的距离占入场价比例）中位数——用于判断止损是否过远。
     decimal MedianRiskPct);
 
 /// <summary>
@@ -36,10 +36,10 @@ public sealed record EvidenceBucket(
 /// </summary>
 public static class EvidenceRules
 {
-    /// <summary>可给出胜率徽章的最低独立波次数（与分级规则一致：少于此时只显示"样本不足"）。</summary>
+    // 可给出胜率徽章的最低独立波次数（与分级规则一致：少于此时只显示"样本不足"）。
     public const int MinEpisodes = 30;
 
-    /// <summary>95% 正态分位（Wilson 区间用）。</summary>
+    // 95% 正态分位（Wilson 区间用）。
     private const decimal Z = 1.96m;
 
     public static EvidenceBucket Build(

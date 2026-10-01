@@ -6,10 +6,10 @@ using Microsoft.Data.Sqlite;
 
 namespace Mdk.Api.Analysis;
 
-/// <summary>信号的事后绩效（由 SignalOutcomeService 在持有期满后回填）。</summary>
+// 信号的事后绩效（由 SignalOutcomeService 在持有期满后回填）。
 public sealed class SignalOutcome
 {
-    /// <summary>ok=已评估；expired=信号过旧超出可用K线范围，无法评估。</summary>
+    // ok=已评估；expired=信号过旧超出可用K线范围，无法评估。
     [JsonPropertyName("status")] public string Status { get; set; } = "ok";
     [JsonPropertyName("ret")] public decimal? Ret { get; set; }
     [JsonPropertyName("excess")] public decimal? Excess { get; set; }
@@ -27,34 +27,34 @@ public sealed class SignalOutcome
 /// </summary>
 public sealed class SignalEntry
 {
-    /// <summary>台账行号（自增主键），用于回填绩效时定位。</summary>
+    // 台账行号（自增主键），用于回填绩效时定位。
     public long Id { get; set; }
     public MarketKind Market { get; set; }
     public TradingPair Pair { get; set; }
     public string Interval { get; set; } = "";
     public string Source { get; set; } = "";
-    /// <summary>买卖点类别（缠论："1买"…"3卖"）；其他来源为 null。用于按语境给出经验可信度。</summary>
+    // 买卖点类别（缠论："1买"…"3卖"）；其他来源为 null。用于按语境给出经验可信度。
     public string? Kind { get; set; }
     public string Side { get; set; } = "";
-    /// <summary>信号记账的K线时间（该根收盘后信号才可知，入场价取该根收盘价）。</summary>
+    // 信号记账的K线时间（该根收盘后信号才可知，入场价取该根收盘价）。
     public long Time { get; set; }
     public decimal Price { get; set; }
-    /// <summary>信号说明原文（含位点价位/触碰次数等，便于事后审计）。</summary>
+    // 信号说明原文（含位点价位/触碰次数等，便于事后审计）。
     public string? Note { get; set; }
     public decimal? StopPrice { get; set; }
-    /// <summary>结构参考价（缠论信号）：用于事后复核"入场是否已经追高"（滞后 ÷ 风险单位）。</summary>
+    // 结构参考价（缠论信号）：用于事后复核"入场是否已经追高"（滞后 ÷ 风险单位）。
     public decimal? ReferencePrice { get; set; }
-    /// <summary>级别共振标签（aligned/counter/none，仅缠论信号）。</summary>
+    // 级别共振标签（aligned/counter/none，仅缠论信号）。
     public string? Confluence { get; set; }
     public bool IsConfirmed { get; set; }
-    /// <summary>信号发生时的市场状态（用于按状态分组统计，如 ADX≥25 的趋势市 vs 震荡市）。</summary>
+    // 信号发生时的市场状态（用于按状态分组统计，如 ADX≥25 的趋势市 vs 震荡市）。
     public decimal? Adx { get; set; }
     public decimal? AtrPct { get; set; }
     public decimal? BandwidthPct { get; set; }
-    /// <summary>联合打分（结构共振 + 技术指标，等权 0–6）；旧行/非缠论行为 null。</summary>
+    // 联合打分（结构共振 + 技术指标，等权 0–6）；旧行/非缠论行为 null。
     public int? JointScore { get; set; }
     public long RecordedAt { get; set; }
-    /// <summary>来源：live=实时分析路径写入；backfill=历史回填（事后一次性生成，统计时需区分）。</summary>
+    // 来源：live=实时分析路径写入；backfill=历史回填（事后一次性生成，统计时需区分）。
     public string Origin { get; set; } = "live";
     public SignalOutcome? Outcome { get; set; }
 }
@@ -123,7 +123,7 @@ public sealed class SignalStore : IDisposable
     /// </summary>
     public event Action<SignalEntry>? SignalRecorded;
 
-    /// <summary>记录一条信号；自然键重复（同一信号已存在）返回 false。</summary>
+    // 记录一条信号；自然键重复（同一信号已存在）返回 false。
     public bool TryRecord(SignalEntry e)
     {
         lock (_sync)
@@ -169,7 +169,7 @@ public sealed class SignalStore : IDisposable
         }
     }
 
-    /// <summary>回填绩效；已评估过的不再覆盖。</summary>
+    // 回填绩效；已评估过的不再覆盖。
     public void MarkOutcome(long id, SignalOutcome outcome)
     {
         lock (_sync)
@@ -227,7 +227,7 @@ public sealed class SignalStore : IDisposable
         }
     }
 
-    /// <summary>全量快照（统计端点用；SQL 侧不做数值聚合，一律取回后按 decimal 计算）。</summary>
+    // 全量快照（统计端点用；SQL 侧不做数值聚合，一律取回后按 decimal 计算）。
     public IReadOnlyList<SignalEntry> Snapshot()
     {
         lock (_sync)
@@ -354,7 +354,7 @@ public sealed class SignalStore : IDisposable
         if (updated > 0) _logger.LogInformation("台账按说明文本回填类别列 {Count} 行", updated);
     }
 
-    /// <summary>增量补列：已存在的库（旧版本建表）缺少新增列时补上，避免要求用户删库重建。</summary>
+    // 增量补列：已存在的库（旧版本建表）缺少新增列时补上，避免要求用户删库重建。
     private void EnsureColumn(string name, string type)
     {
         using var check = _conn.CreateCommand();
@@ -419,7 +419,7 @@ public sealed class SignalStore : IDisposable
     private static string? Text(SqliteDataReader reader, int ordinal) =>
         reader.IsDBNull(ordinal) ? null : reader.GetString(ordinal);
 
-    /// <summary>decimal → TEXT：与 JSON 输出同一口径（八位小数、定点、无尾随零）。</summary>
+    // decimal → TEXT：与 JSON 输出同一口径（八位小数、定点、无尾随零）。
     private static string ToText(decimal value) => DecimalJsonConverter.Format(value);
 
     private static object ToText(decimal? value) => value is null ? DBNull.Value : DecimalJsonConverter.Format(value.Value);
@@ -504,7 +504,7 @@ public sealed class SignalStore : IDisposable
         _logger.LogInformation("导入的交易对：{Pairs}", string.Join(", ", pairs));
     }
 
-    /// <summary>旧 JSONL 台账的行结构（仅用于一次性导入，勿在新代码中使用）。</summary>
+    // 旧 JSONL 台账的行结构（仅用于一次性导入，勿在新代码中使用）。
     private sealed class LegacyEntry
     {
         [JsonPropertyName("market")] public string Market { get; set; } = "";
@@ -529,7 +529,7 @@ public sealed class SignalStore : IDisposable
     }
 }
 
-/// <summary>单来源信号的历史绩效汇总。</summary>
+// 单来源信号的历史绩效汇总。
 public sealed record SignalSourceStats(
     string Source,
     int N,
@@ -540,15 +540,15 @@ public sealed record SignalSourceStats(
     decimal NetPositiveRate,
     decimal StopHitRate,
     string Grade,
-    /// <summary>分级依据说明（不达标时给出具体原因，便于前端展示与自查）。</summary>
+    // 分级依据说明（不达标时给出具体原因，便于前端展示与自查）。
     string GradeReason,
-    /// <summary>集中度：样本最多的单一标的占比（0~1），用于识别"靠单个标的的行情撑起统计"。</summary>
+    // 集中度：样本最多的单一标的占比（0~1），用于识别"靠单个标的的行情撑起统计"。
     decimal TopSymbolShare,
-    /// <summary>其中来自历史回填的样本数（事后生成，参考价值低于在线样本）。</summary>
+    // 其中来自历史回填的样本数（事后生成，参考价值低于在线样本）。
     int NBackfill);
 
 
-/// <summary>按市场状态/共振状态分组的绩效（用于判断信号的状态依赖性）。</summary>
+// 按市场状态/共振状态分组的绩效（用于判断信号的状态依赖性）。
 public sealed record SignalBucketStats(
     string Label,
     int N,
@@ -560,9 +560,9 @@ public sealed record SignalStatsResponse(
     /// <summary>统计窗口口径：按**记录时间**（RecorderAt）筛选，而非信号K线时间——
     /// 回填样本的 recordedAt 是回填运行时刻，因此"近N天"对回填样本等价于"全部回填样本"。</summary>
     string WindowBasis,
-    /// <summary>窗口内的独立波次数（当前生效的实盘判据样本量）。</summary>
+    // 窗口内的独立波次数（当前生效的实盘判据样本量）。
     int WindowEpisodes,
-    /// <summary>其中**实时落库**的独立波次数（事实计数；"可实盘"判据已废弃，见 SignalQualityRules 注释）。</summary>
+    // 其中**实时落库**的独立波次数（事实计数；"可实盘"判据已废弃，见 SignalQualityRules 注释）。
     int RealtimeEpisodes,
     int TotalEvaluated,
     SignalSourceStats? Overall,

@@ -20,7 +20,7 @@ public static class JointScoreRules
 {
     public const int MaxScore = 5;
 
-    /// <summary>逐特征计算（在"缠论内部窗口"的指标序列上取 index 处；指标已降为图表，但仍是合法的语境数据）。</summary>
+    // 逐特征计算（在"缠论内部窗口"的指标序列上取 index 处；指标已降为图表，但仍是合法的语境数据）。
     public static JointScoreDetail Compute(
         decimal price, decimal? ema200, decimal? rsi, decimal? macdHist,
         string side, string? kind, decimal? areaRatio, decimal? riskPct, decimal? lagShare)
@@ -33,7 +33,7 @@ public static class JointScoreRules
         return new JointScoreDetail(score, MaxScore, kind, features);
     }
 
-    /// <summary>1/2 类（反转语义）的 5 特征。</summary>
+    // 1/2 类（反转语义）的 5 特征。
     private static JointScoreFeature[] ReversalFeatures(
         decimal price, decimal? ema200, decimal? rsi, decimal? areaRatio,
         bool isBuy, decimal? riskPct, decimal? lagShare)
@@ -50,7 +50,7 @@ public static class JointScoreRules
         };
     }
 
-    /// <summary>3 类（延续语义）的 5 特征。</summary>
+    // 3 类（延续语义）的 5 特征。
     private static JointScoreFeature[] ContinuationFeatures(
         decimal price, decimal? ema200, decimal? rsi, decimal? macdHist,
         bool isBuy, decimal? riskPct, decimal? lagShare)
@@ -68,7 +68,7 @@ public static class JointScoreRules
         };
     }
 
-    /// <summary>滞后占比 = |入场价 − 结构参考价| ÷ |入场价 − 失效位|。</summary>
+    // 滞后占比 = |入场价 − 结构参考价| ÷ |入场价 − 失效位|。
     public static decimal? LagShare(decimal price, decimal? reference, decimal? stop)
     {
         if (reference is not { } r || stop is not { } s) return null;
@@ -76,7 +76,7 @@ public static class JointScoreRules
         return risk <= 0m ? null : Math.Abs(price - r) / risk;
     }
 
-    /// <summary>风险单位（占入场价比例）= |入场价 − 失效位| ÷ 入场价。</summary>
+    // 风险单位（占入场价比例）= |入场价 − 失效位| ÷ 入场价。
     public static decimal? RiskPct(decimal price, decimal? stop)
     {
         if (stop is not { } s || price <= 0m) return null;
@@ -84,13 +84,13 @@ public static class JointScoreRules
     }
 }
 
-/// <summary>单个打分特征（名称 + 是否命中）。</summary>
+// 单个打分特征（名称 + 是否命中）。
 public sealed record JointScoreFeature(string Name, bool Hit);
 
-/// <summary>联合打分明细：分数 + 该类别下的逐特征命中。</summary>
+// 联合打分明细：分数 + 该类别下的逐特征命中。
 public sealed record JointScoreDetail(
     int Score,
     int MaxScore,
-    /// <summary>信号类别（"1买"…"3卖"），特征按类别取反转或延续语义。</summary>
+    // 信号类别（"1买"…"3卖"），特征按类别取反转或延续语义。
     string? Kind,
     IReadOnlyList<JointScoreFeature> Features);

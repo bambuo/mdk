@@ -847,6 +847,34 @@ vue-tsc + 构建通过。
 自带测试 144/144；构建 0 警告 0 错误；重启实测：WS 正常连接、合约分析 200、
 空闲释放回调执行 3 次（spot:15m / spot:1h / fut:1h）无一崩溃、进程存活。
 
+## 0.29 用 Rider MCP 做语法升级与代码体检（2026-10-01，用户要求"用好 rider mcp 能力"）
+用 Rider 的代码分析（`lint_files`，含提示级）扫了后端全部 60 个 .cs 文件，按"值得改/纯风格/误报"三档分类后，
+修掉了真实问题与 C# 14 语法升级点。**关键产出是分类纪律**——Rider 的弱警告里大部分是纯风格微调
+（尾随逗号、var、局部函数位置、模式合并），全改只会制造巨量无意义 diff；真正值得动手的是下面这些。
+
+### 修复的真实问题
+| 位置 | 问题 | 处置 |
+|---|---|---|
+| `AnalysisEngine` | **死计算**：打分 v2 重构后 `scoreEma20/scoreEma50/scoreAdx` 仍在每次分析时计算 EMA20/EMA50/ADX 却无人使用（Rider："仅被赋值从未读取"） | 删除三段计算（每次分析省 3 趟指标计算） |
+| `AttentionRules` | 我上一轮误删了字段文档注释的 `</summary>` 闭合 | 补回 |
+| `WatchlistEndpoints` | SSE 端点里未使用的 `readTask` | 改弃元 |
+| `RestEndpoints.Rate` | 可能多次枚举（谓词与计数各枚举一遍） | 内部物化一次（`IReadOnlyList` 优先复用，`IEnumerable` 才 `ToList`） |
+| `MarketKind` / `TradingPair` / `WatchlistSignalBroadcaster` | 冗余 using | 移除 |
+
+### 语法升级（集合表达式，共 9 处）
+`TradingPair.KnownQuotes`、`BinanceRestClient.GetSymbols`、`AnalysisEngine` 对齐结果 ×3 与支撑阻力合并、
+`RestEndpoints` 池过滤 ×2、`AnalysisService` 证据桶——`.ToArray()/.ToList()` 全部改为 **`[.. seq]` 集合表达式**。
+（Rider 点名的其余集合表达式位点为多行数组实参，转换收益低，留待统一。）
+
+### 检查过但不改的（含理由）
+- `TickerRaw`/`SymbolRaw`"从未被实例化"：**误报**——它们由 System.Text.Json 反序列化器实例化；
+- `Get24hTickersAsync` 建议改名 `Get24HTickersAsync`：领域口径"24h"正确，命名规则让位；
+- JSON DTO 的 `set` → `init`/get-only：System.Text.Json 支持但属批量 churn，暂缓；
+- 日志参数成本、尾随逗号、var/模式微调：纯风格。
+
+### 验证
+构建 **0 警告 0 错误**；自带测试 144/144；重启后合约/现货分析正常。
+
 ## 1. 目录结构（全新项目 /Users/johana/Desktop/mdk）
 ```
 mdk/

@@ -15,10 +15,10 @@ public static class AttentionRules
     /// <summary>买卖点"新鲜度"上限（根）：超过则认为该位置已过。</summary>
     public const int FreshBars = 10;
 
-    /// <summary>贴边阈值（ATR 倍数）：距中枢边界在此以内算"边缘"。 */
+    /// <summary>贴边阈值（ATR 倍数）：距中枢边界在此以内算"边缘"。</summary>
     public const decimal EdgeAtr = 0.5m;
 
-    /// <summary>趋势中段阈值（ATR 倍数）：超过则认为已远离中枢，属追单区。 */
+    /// <summary>趋势中段阈值（ATR 倍数）：超过则认为已远离中枢，属追单区。</summary>
     public const decimal FarAtr = 2m;
 
     /// <summary>强背驰阈值（MACD 面积比）。</summary>

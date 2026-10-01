@@ -25,10 +25,9 @@ public readonly record struct TradingPair : IComparable<TradingPair>
             "MXN", "ZAR", "JPY", "GBP", "AUD", "XBT",
             "BNB", "BTC", "ETH", "TRX", "XRP", "DOT", "SOL", "DOGE", "LTC",
         ];
-        return candidates
+        return [.. candidates
             .OrderByDescending(q => q.Length)
-            .ThenBy(q => q, StringComparer.Ordinal)
-            .ToArray();
+            .ThenBy(q => q, StringComparer.Ordinal)];
     }
 
     private TradingPair(string baseAsset, string quoteAsset)

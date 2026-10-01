@@ -11,7 +11,7 @@ namespace Mdk.Api.Analysis;
 /// </summary>
 public sealed record WatchlistIndicatorState(string Source, string State, string Tone);
 
-/// <summary>单个周期的监控快照（来自后台最新一次分析，只取监控页需要的摘要字段）。</summary>
+// 单个周期的监控快照（来自后台最新一次分析，只取监控页需要的摘要字段）。
 public sealed record WatchlistIntervalSnapshot(
     string Interval,
     decimal LastPrice,
@@ -27,11 +27,11 @@ public sealed record WatchlistIntervalSnapshot(
     long? LastSignalTime,
     int? BarsSinceSignal,
     int SignalCount,
-    /// <summary>各指标当前状态（EMA 排列 / RSI 位置 / MACD 动能；指标不产生信号，见用户拍板口径）。</summary>
+    // 各指标当前状态（EMA 排列 / RSI 位置 / MACD 动能；指标不产生信号，见用户拍板口径）。
     IReadOnlyList<WatchlistIndicatorState> IndicatorStates,
     long UpdatedAt);
 
-/// <summary>监控条目视图：条目配置 + 各周期结构快照 + 跨周期共振判定。</summary>
+// 监控条目视图：条目配置 + 各周期结构快照 + 跨周期共振判定。
 public sealed record WatchlistItemView(
     string Market,
     string Symbol,
@@ -54,7 +54,7 @@ public sealed class WatchlistMonitorService(
     IOptions<SignalOptions> signalOptions,
     ILogger<WatchlistMonitorService> logger) : BackgroundService
 {
-    /// <summary>最新信号在多少根K线内仍算"新鲜"，用于跨周期共振判定。</summary>
+    // 最新信号在多少根K线内仍算"新鲜"，用于跨周期共振判定。
     private const int ResonanceFreshBars = 30;
 
     private readonly SignalOptions _options = signalOptions.Value;
@@ -96,7 +96,7 @@ public sealed class WatchlistMonitorService(
         }
     }
 
-    /// <summary>立即分析整张监控列表一次。</summary>
+    // 立即分析整张监控列表一次。
     public async Task AnalyzeAllAsync(CancellationToken ct)
     {
         foreach (var item in store.All())
@@ -106,7 +106,7 @@ public sealed class WatchlistMonitorService(
         }
     }
 
-    /// <summary>立即分析单个条目（新增条目后预热，避免监控页空白）。</summary>
+    // 立即分析单个条目（新增条目后预热，避免监控页空白）。
     public async Task AnalyzeItemAsync(WatchItem item, CancellationToken ct)
     {
         foreach (var itv in item.Intervals)
@@ -128,7 +128,7 @@ public sealed class WatchlistMonitorService(
         }
     }
 
-    /// <summary>监控页视图：条目 + 各周期快照 + 跨周期共振。</summary>
+    // 监控页视图：条目 + 各周期快照 + 跨周期共振。
     public IReadOnlyList<WatchlistItemView> BuildView()
     {
         var views = new List<WatchlistItemView>();
@@ -166,7 +166,7 @@ public sealed class WatchlistMonitorService(
             r.Signals.Count, IndicatorStates(r), at);
     }
 
-    /// <summary>指标当前状态：EMA 排列 / RSI 位置 / MACD 动能（取各序列最后一根，与图表同源）。</summary>
+    // 指标当前状态：EMA 排列 / RSI 位置 / MACD 动能（取各序列最后一根，与图表同源）。
     private static IReadOnlyList<WatchlistIndicatorState> IndicatorStates(AnalysisResult r)
     {
         var states = new List<WatchlistIndicatorState>();
@@ -191,15 +191,15 @@ public sealed class WatchlistMonitorService(
         return states;
     }
 
-    /// <summary>分析序列的最后一个非空值（序列与K线对齐，末端即"当前"）。</summary>
+    // 分析序列的最后一个非空值（序列与K线对齐，末端即"当前"）。
     private static decimal? Last(AnalysisResult r, string key) =>
         r.Series.TryGetValue(key, out var arr) ? arr.LastOrDefault(v => v is not null) : null;
 
-    /// <summary>买卖点类别（"1买"…"3卖"）→ 方向。</summary>
+    // 买卖点类别（"1买"…"3卖"）→ 方向。
     private static string? SideOf(string? kind) =>
         kind is null ? null : kind.EndsWith('买') ? "buy" : "sell";
 
-    /// <summary>跨周期共振：只看"新鲜"（≤{ResonanceFreshBars} 根内）的最近买卖点；全同向=对齐，多空并存=分歧，其余=无。</summary>
+    // 跨周期共振：只看"新鲜"（≤{ResonanceFreshBars} 根内）的最近买卖点；全同向=对齐，多空并存=分歧，其余=无。
     private static string Resonance(IReadOnlyList<WatchlistIntervalSnapshot> snaps)
     {
         var fresh = snaps

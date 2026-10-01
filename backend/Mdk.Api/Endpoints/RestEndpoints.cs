@@ -169,12 +169,12 @@ internal static class RestEndpoints
                 {
                     // 交易对统一按值对象比较（接受 BTCUSDT / BTC-USDT / BTC/USDT 三种写法）
                     var raw = symbol.Trim().ToUpperInvariant().Replace("/", "").Replace("-", "");
-                    if (TradingPair.TryParse(raw, out var want)) pool = pool.Where(e => e.Pair == want).ToList();
+                    if (TradingPair.TryParse(raw, out var want)) pool = [..pool.Where(e => e.Pair == want)];
                 }
                 if (!string.IsNullOrWhiteSpace(interval))
                 {
                     var i = interval.Trim();
-                    pool = pool.Where(e => e.Interval == i).ToList();
+                    pool = [..pool.Where(e => e.Interval == i)];
                 }
 
                 SignalSourceStats? Summarize(string source, IReadOnlyList<SignalEntry> items)
@@ -243,8 +243,11 @@ internal static class RestEndpoints
             .ToList();
     }
 
-    private static decimal Rate(IEnumerable<SignalEntry> items, Func<SignalEntry, bool> predicate) =>
-        items.Count(predicate) / (decimal)items.Count();
+    private static decimal Rate(IEnumerable<SignalEntry> items, Func<SignalEntry, bool> predicate)
+    {
+        var list = items as IReadOnlyList<SignalEntry> ?? items.ToList();   // 物化一次，避免谓词/计数重复枚举
+        return list.Count(predicate) / (decimal)list.Count;
+    }
 
     private static IResult BadRequest(string? message) =>
         Results.Json(new { error = message ?? "请求无效" }, statusCode: 400);

@@ -145,7 +145,7 @@ public sealed class AnalysisService(
 
         var buckets = pool
             .GroupBy(e => e.Kind)
-            .Select(g => EvidenceRules.Build(g.Key, interval, g.ToList()))
+            .Select(g => EvidenceRules.Build(g.Key, interval, [..g]))
             .OrderByDescending(b => b.NEpisodes)
             .ToList();
 

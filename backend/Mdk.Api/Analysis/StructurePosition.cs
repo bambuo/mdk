@@ -2,14 +2,14 @@ using Mdk.Api.Models;
 
 namespace Mdk.Api.Analysis;
 
-/// <summary>某个级别的"价格在结构中的位置"（确定性描述，不含任何概率/统计推断）。</summary>
+// 某个级别的"价格在结构中的位置"（确定性描述，不含任何概率/统计推断）。
 public sealed record LevelPosition(
-    /// <summary>级别标识：higher / primary / lower。</summary>
+    // 级别标识：higher / primary / lower。
     string Level,
     string Interval,
-    /// <summary>中枢归属：above=中枢上方（离开段）/ in=中枢内（震荡）/ below=中枢下方 / none=无中枢。</summary>
+    // 中枢归属：above=中枢上方（离开段）/ in=中枢内（震荡）/ below=中枢下方 / none=无中枢。
     string Zone,
-    /// <summary>距中枢上沿（zone=above 时）或下沿（zone=below 时）的距离占价格比例。</summary>
+    // 距中枢上沿（zone=above 时）或下沿（zone=below 时）的距离占价格比例。
     decimal? DistancePct,
     decimal? PivotZg,
     decimal? PivotZd,
@@ -21,51 +21,51 @@ public sealed record LevelPosition(
 /// 而不是预测涨跌或给出交易授权。所有字段都可由 K 线与结构直接重算，无概率假设。
 /// </summary>
 public sealed record StructurePosition(
-    /// <summary>本级别当前笔方向：up / down / none。</summary>
+    // 本级别当前笔方向：up / down / none。
     string StrokeDirection,
-    /// <summary>当前笔是否已确认（未确认 = 仍在延伸，终点可能推进）。</summary>
+    // 当前笔是否已确认（未确认 = 仍在延伸，终点可能推进）。
     bool StrokeConfirmed,
-    /// <summary>当前笔起点价 → 终点价。</summary>
+    // 当前笔起点价 → 终点价。
     decimal? StrokeFrom,
     decimal? StrokeTo,
-    /// <summary>价格自本笔极值端回撤的幅度 ÷ 本笔幅度（0=仍在极值端，1=回到起点；负数=已越过端点继续延伸）。</summary>
+    // 价格自本笔极值端回撤的幅度 ÷ 本笔幅度（0=仍在极值端，1=回到起点；负数=已越过端点继续延伸）。
     decimal? RetracePct,
-    /// <summary>本笔自起点分型已运行多少根K线。</summary>
+    // 本笔自起点分型已运行多少根K线。
     int StrokeBars,
-    /// <summary>中枢归属（本级别）：above / in / below / none。</summary>
+    // 中枢归属（本级别）：above / in / below / none。
     string PivotZone,
     decimal? PivotZg,
     decimal? PivotZd,
-    /// <summary>中枢已包含多少笔（越大越"老"，延伸程度）。</summary>
+    // 中枢已包含多少笔（越大越"老"，延伸程度）。
     int PivotStrokes,
-    /// <summary>中枢自首笔起点已运行多少根K线。</summary>
+    // 中枢自首笔起点已运行多少根K线。
     int PivotBars,
-    /// <summary>价格距中枢边界（落在哪侧取哪侧）的距离占价格比例。</summary>
+    // 价格距中枢边界（落在哪侧取哪侧）的距离占价格比例。
     decimal? EdgeDistancePct,
-    /// <summary>同上，但以 ATR 归一（"离中枢上沿 0.8×ATR"比百分比更跨标的可比）。</summary>
+    // 同上，但以 ATR 归一（"离中枢上沿 0.8×ATR"比百分比更跨标的可比）。
     decimal? EdgeDistanceAtr,
-    /// <summary>结构失效位：最近买卖点所依据的参考极值（价格回到该位，结构前提即不成立）。</summary>
+    // 结构失效位：最近买卖点所依据的参考极值（价格回到该位，结构前提即不成立）。
     decimal? InvalidationPrice,
-    /// <summary>止损参考：结构失效位上加减 ATR 缓冲后的可执行价位（≠ 失效位）。</summary>
+    // 止损参考：结构失效位上加减 ATR 缓冲后的可执行价位（≠ 失效位）。
     decimal? StopReferencePrice,
-    /// <summary>现价距**止损参考**的距离占价格比例——即"1R 有多远"。</summary>
+    // 现价距**止损参考**的距离占价格比例——即"1R 有多远"。
     decimal? DistanceToStopReferencePct,
-    /// <summary>最近买卖点类别 / 距今根数（事实陈述，不含绩效推断）。</summary>
+    // 最近买卖点类别 / 距今根数（事实陈述，不含绩效推断）。
     string? LastKind,
     int? BarsSinceLastSignal,
-    /// <summary>最近买卖点的记账价（入场参考）。</summary>
+    // 最近买卖点的记账价（入场参考）。
     decimal? LastSignalPrice,
-    /// <summary>最近买卖点的背驰面积比（仅 1/2 类有值；≤0.7 属强背驰）。</summary>
+    // 最近买卖点的背驰面积比（仅 1/2 类有值；≤0.7 属强背驰）。
     decimal? LastAreaRatio,
-    /// <summary>已走 R：现价相对最近买卖点入场价走过的幅度 ÷ 该信号的风险单位（&gt;1 说明成本已吃掉一个风险单位）。</summary>
+    // 已走 R：现价相对最近买卖点入场价走过的幅度 ÷ 该信号的风险单位（&gt;1 说明成本已吃掉一个风险单位）。
     decimal? MovedR,
-    /// <summary>各级别中枢归属对照（高周期 / 本级别 / 次级别，缺数据则无该项）。</summary>
+    // 各级别中枢归属对照（高周期 / 本级别 / 次级别，缺数据则无该项）。
     IReadOnlyList<LevelPosition> Levels,
-    /// <summary>多级别归属是否一致：aligned=各级别同侧 / mixed=分歧 / single=只有本级别有中枢。</summary>
+    // 多级别归属是否一致：aligned=各级别同侧 / mixed=分歧 / single=只有本级别有中枢。
     string CrossLevel,
-    /// <summary>一句话人话描述（可直接展示）。</summary>
+    // 一句话人话描述（可直接展示）。
     string Summary,
-    /// <summary>关注度判定（确定性）：把结构位置翻译为"此刻是否值得看单"，见 <see cref="AttentionRules"/>。</summary>
+    // 关注度判定（确定性）：把结构位置翻译为"此刻是否值得看单"，见 <see cref="AttentionRules"/>。
     AttentionRules.Verdict? Attention = null);
 
 /// <summary>
@@ -186,7 +186,7 @@ public static class StructurePositionCalculator
             Summary: summary);
     }
 
-    /// <summary>各级别中枢归属是否一致（只比较有中枢的级别）。</summary>
+    // 各级别中枢归属是否一致（只比较有中枢的级别）。
     private static string CrossLevelOf(IReadOnlyList<LevelPosition> levels, string ownZone)
     {
         var zones = levels.Where(l => l.Zone != "none").Select(l => l.Zone).Distinct().ToList();
@@ -194,7 +194,7 @@ public static class StructurePositionCalculator
         return zones.Count == 1 ? "aligned" : "mixed";
     }
 
-    /// <summary>一句话描述（交易语言，不带预测口吻）。</summary>
+    // 一句话描述（交易语言，不带预测口吻）。
     private static string Describe(
         bool? isUp, bool confirmed, decimal? retrace, string zone, bool hasPivot, int pivotStrokes,
         decimal? edgeAtr, decimal? edgePct, string? kind, int barsSince,

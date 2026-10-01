@@ -43,11 +43,11 @@ public static class AnalysisEngine
         // 信号发生时的市场状态（ADX 强度 / 波动率 / 带宽），用于事后状态依赖统计
         SignalRegime RegimeAt(int i)
         {
-            var adx = i < dmi.Adx.Length && (dmi.Adx[i]) is not null ? dmi.Adx[i] : (decimal?)null;
+            var adx = i < dmi.Adx.Length && dmi.Adx[i] is not null ? dmi.Adx[i] : (decimal?)null;
             var close = candles[i].Close;
-            var atrPct = i < atr.Length && (atr[i]) is not null && close > 0 ? atr[i] / close : (decimal?)null;
+            var atrPct = i < atr.Length && atr[i] is not null && close > 0 ? atr[i] / close : null;
             var mid = boll.Middle[i];
-            var bandwidth = (mid) is not null && mid > 0 && (boll.Upper[i]) is not null && (boll.Lower[i]) is not null
+            var bandwidth = mid is not null && mid > 0 && boll.Upper[i] is not null && boll.Lower[i] is not null
                 ? (boll.Upper[i] - boll.Lower[i]) / mid
                 : (decimal?)null;
             return new SignalRegime(adx, atrPct, bandwidth);
@@ -85,7 +85,7 @@ public static class AnalysisEngine
         // 只用记账时间 ≤ 本级别信号时间的高周期信号 —— 无未来函数。
         Chan.ChanResult? htfChan = null;
         if (chanResult is not null && htfCandles is { Count: > 50 } htfForChan && htfInterval is not null
-            && ReferenceEquals(htfCandles, chanWindow) == false)
+            && !ReferenceEquals(htfCandles, chanWindow))
         {
             var htfCloses = htfForChan.Select(c => c.Close).ToArray();
             var htfHist = Macd.Compute(htfCloses).Hist;
@@ -99,18 +99,13 @@ public static class AnalysisEngine
                 chanResult.Points.Select(p => (p.Time, p.Side)));
 
         // 联合打分：特征在"缠论内部窗口"上计算（与结构同源，保证不同 limit 下打分一致）
-        decimal?[] scoreEma20 = [], scoreEma50 = [], scoreEma200 = [], scoreRsi = [], scoreHist = [], scoreAdx = [];
+        decimal?[] scoreEma200 = [], scoreRsi = [], scoreHist = [];
         if (chanResult is not null)
         {
             var sc = chanWindow.Select(c => c.Close).ToArray();
-            scoreEma20 = Ema.Compute(sc, 20);
-            scoreEma50 = Ema.Compute(sc, 50);
             scoreEma200 = Ema.Compute(sc, 200);
             scoreRsi = Rsi.Compute(sc, 14);
             scoreHist = ReferenceEquals(chanWindow, candles) ? macd.Hist : Macd.Compute(sc).Hist;
-            scoreAdx = AdxDmi.Compute(
-                chanWindow.Select(c => c.High).ToArray(),
-                chanWindow.Select(c => c.Low).ToArray(), sc, 14).Adx;
         }
 
         var chanSignals = chanResult is null
@@ -365,9 +360,9 @@ public static class AnalysisEngine
         return raw with
         {
             Series = series,
-            Strokes = raw.Strokes.Select(Shift).ToList(),
-            Fractals = raw.Fractals.Select(ShiftFractal).ToList(),
-            Points = raw.Points.Select(ShiftPoint).ToList(),
+            Strokes = [..raw.Strokes.Select(Shift)],
+            Fractals = [..raw.Fractals.Select(ShiftFractal)],
+            Points = [..raw.Points.Select(ShiftPoint)],
         };
     }
 
@@ -388,7 +383,7 @@ public static class AnalysisEngine
     }
 
     private static decimal?[] ToNullable(decimal?[] values) =>
-        Array.ConvertAll(values, v => (v) is null ? (decimal?)null : v);
+        Array.ConvertAll(values, v => v is null ? null : v);
 }
 
 /// <summary>
@@ -494,7 +489,7 @@ public static class TrendAnalyzer
     private static decimal? LastValid(decimal?[] values)
     {
         for (var i = values.Length - 1; i >= 0; i--)
-            if ((values[i]) is not null)
+            if (values[i] is not null)
                 return values[i];
         return null;
     }
@@ -572,7 +567,7 @@ public static class SupportResistance
             .Select(l => new PriceLevel("resistance", l.Price, l.Strength, Pct(l.Price, last.Close)))
             .ToList();
 
-        return resistances.Concat(supports).ToList();
+        return [.. resistances, .. supports];
     }
 
     private static decimal Pct(decimal level, decimal price) => Math.Round((level - price) / price * 100, 2);
@@ -580,7 +575,7 @@ public static class SupportResistance
     private static decimal? LastValid(decimal?[] values)
     {
         for (var i = values.Length - 1; i >= 0; i--)
-            if ((values[i]) is not null)
+            if (values[i] is not null)
                 return values[i];
         return null;
     }
