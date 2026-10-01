@@ -65,6 +65,11 @@ interface PivotBand {
   level: 'higher' | 'primary' | 'lower'
 }
 
+/** 绘制层级：数值越大越晚画（压在上层）。本级别是判断主体，放最上层。 */
+function rank(level: PivotBand['level']): number {
+  return level === 'lower' ? 0 : level === 'higher' ? 1 : 2
+}
+
 class PivotBandRenderer implements IPrimitivePaneRenderer {
   constructor(
     private bands: PivotBand[],
@@ -93,10 +98,11 @@ class PivotBandRenderer implements IPrimitivePaneRenderer {
         const top = Math.min(yTop, yBot)
         const height = Math.max(2, Math.abs(yBot - yTop))
         // 按级别分色：高周期=暖橙（大区间，淡）、本级别=紫（主体）、次级别=蓝（细粒度，更淡）
+        // 高周期/次级别原先只有 0.07~0.08 的填充，几乎看不见 → 开"多级别叠加"像是没反应；提到能分辨的强度
         const palette = b.level === 'higher'
-          ? { fill: 'rgba(240,160,80,0.07)', stroke: 'rgba(240,160,80,0.35)', dash: [8, 4] }
+          ? { fill: 'rgba(240,160,80,0.10)', stroke: 'rgba(240,160,80,0.55)', dash: [8, 4] }
           : b.level === 'lower'
-            ? { fill: 'rgba(90,170,240,0.08)', stroke: 'rgba(90,170,240,0.35)', dash: [3, 3] }
+            ? { fill: 'rgba(90,170,240,0.11)', stroke: 'rgba(90,170,240,0.50)', dash: [3, 3] }
             : { fill: b.confirmed ? 'rgba(198,120,221,0.15)' : 'rgba(198,120,221,0.09)', stroke: 'rgba(198,120,221,0.5)', dash: [4, 3] }
         const fill = isLatest
           ? b.confirmed ? 'rgba(198,120,221,0.26)' : 'rgba(198,120,221,0.16)'
@@ -232,15 +238,20 @@ function applyOverlayLines() {
   chanZdSeries?.setData([])
   const pivots = a.chan?.pivots ?? []
   const bands: PivotBand[] = []
-  for (const level of a.chanLevels ?? []) {
-    if (level.role !== 'primary' && !props.toggles.multiLevel) continue   // 多级别关闭时只画本级别
-    for (const p of level.pivots) {
-      bands.push({ from: p.fromTime, to: p.toTime, zg: p.zg, zd: p.zd, confirmed: p.isConfirmed, level: level.role })
+  if (props.toggles.chan) {
+    for (const level of a.chanLevels ?? []) {
+      if (level.role !== 'primary' && !props.toggles.multiLevel) continue   // 多级别关闭时只画本级别
+      for (const p of level.pivots) {
+        bands.push({ from: p.fromTime, to: p.toTime, zg: p.zg, zd: p.zd, confirmed: p.isConfirmed, level: level.role })
+      }
     }
+    if (!bands.length) {
+      for (const p of pivots) bands.push({ from: p.fromTime, to: p.toTime, zg: p.zg, zd: p.zd, confirmed: p.isConfirmed, level: 'primary' })
+    }
+    // 绘制顺序：次级别与高周期先画，本级别最后画（本级别压在最上层——它是判断的主体）
+    bands.sort((x, y) => rank(x.level) - rank(y.level))
   }
-  if (!bands.length) {
-    for (const p of pivots) bands.push({ from: p.fromTime, to: p.toTime, zg: p.zg, zd: p.zd, confirmed: p.isConfirmed, level: 'primary' })
-  }
+
   pivotBands?.setBands(bands)
 
   // 最新中枢的上下沿额外画到价格轴，便于直接读出 ZG / ZD 价位
@@ -344,6 +355,9 @@ function applyVisibility() {
   })
   chanZgSeries?.applyOptions({ visible: props.toggles.chan })
   chanZdSeries?.applyOptions({ visible: props.toggles.chan })
+  // 中枢色带的内容依赖 toggles（缠论总开关、多级别叠加）——必须在这里重建，
+  // 否则点开关只会改序列可见性，色带要等下一次行情推送才更新（表现为"点了没反应"）
+  applyOverlayLines()
   rsiSeries?.applyOptions({ visible: props.toggles.rsi })
   macdHistSeries?.applyOptions({ visible: props.toggles.macd })
   difSeries?.applyOptions({ visible: props.toggles.macd })

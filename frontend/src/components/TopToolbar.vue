@@ -71,13 +71,21 @@ const primaryItems: { key: keyof Toggles; label: string }[] = [
   { key: 'signals', label: '缠论买卖点' },
 ]
 
-const secondaryItems: { key: keyof Toggles; label: string }[] = [
-  { key: 'multiLevel', label: '多级别叠加' },
-  { key: 'levels', label: '支撑阻力点位' },
-  { key: 'ema', label: 'EMA 均线' },
-  { key: 'rsi', label: 'RSI' },
-  { key: 'macd', label: 'MACD' },
-  { key: 'boll', label: 'BOLL' },
+const secondaryItems: { key: keyof Toggles; label: string; hint: string }[] = [
+  {
+    key: 'multiLevel',
+    label: '多级别叠加',
+    hint: '同时画出高周期与次周期的中枢色带：橙=高周期、紫=本级别（在最上层）、蓝=次周期；关闭时只画本级别',
+  },
+  {
+    key: 'levels',
+    label: '支撑阻力点位',
+    hint: '摆动极值聚类 + 客观锚点（前日/前周高低、整数关口、日VWAP、成交量POC/价值区）；已否证无统计优势，仅作风险锚',
+  },
+  { key: 'ema', label: 'EMA 均线', hint: 'EMA20/50/200，仅图表指标，不产生信号' },
+  { key: 'rsi', label: 'RSI', hint: 'RSI(14) 副图，仅图表指标' },
+  { key: 'macd', label: 'MACD', hint: 'MACD 副图；缠论背驰用的是它的柱面积' },
+  { key: 'boll', label: 'BOLL', hint: '布林带(20,2)，仅图表指标' },
 ]
 
 const toggleItems = [...primaryItems, ...secondaryItems]
@@ -188,7 +196,9 @@ const displayChangePct = computed(() => {
       </a-button>
       <template #content>
         <a-checkbox-group v-model="secondaryKeys" direction="vertical" size="small">
-          <a-checkbox v-for="item in secondaryItems" :key="item.key" :value="item.key">{{ item.label }}</a-checkbox>
+          <a-checkbox v-for="item in secondaryItems" :key="item.key" :value="item.key" :title="item.hint">
+            {{ item.label }}
+          </a-checkbox>
         </a-checkbox-group>
       </template>
     </a-popover>
