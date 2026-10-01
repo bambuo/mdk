@@ -27,23 +27,27 @@ const namedLevels = computed(() => {
 const resistances = computed(() => namedLevels.value.filter(l => l.kind === 'resistance'))
 const supports = computed(() => namedLevels.value.filter(l => l.kind === 'support'))
 
-/** 位点强度星：按加权强度分（未测试的客观锚点为 0 → 不画星） */
-function levelStars(l: PriceLevel): string {
-  return '★'.repeat(Math.min(Math.round(l.score), 5))
+/** 强度分文本：1 位小数；未测试的客观锚点为 0，显示为 —（星标会封顶，分数不会） */
+function levelScore(l: PriceLevel): string {
+  const score = l.score ?? 0
+  return score > 0 ? score.toFixed(1) : '—'
 }
 
-/** 位点来源标签：摆动点是基准口径，不再重复标注 */
+/**
+ * 位点来源标签：摆动点是基准口径，不再重复标注。
+ * `?? []` 是版本错位的护栏：前端热更新会先于后端重启生效，旧响应里没有 sources 字段。
+ */
 function levelTags(l: PriceLevel): string[] {
-  return l.sources.filter(s => s !== '摆动点')
+  return (l.sources ?? []).filter(s => s !== '摆动点')
 }
 
 /** 位点悬停说明：强度构成与来源（回答"这条线凭什么在这里"） */
 function levelTitle(l: PriceLevel): string {
-  const parts = [`强度 ${l.score.toFixed(1)}`]
+  const parts = [`强度 ${(l.score ?? 0).toFixed(1)}`]
   parts.push(l.touches > 0 ? `触碰 ${l.touches} 次` : '尚未被触碰（客观锚点）')
   if (l.reactionAtr != null) parts.push(`平均反应 ${l.reactionAtr.toFixed(1)}×ATR`)
   if (l.ageBars != null) parts.push(`最近触碰在 ${l.ageBars} 根前`)
-  parts.push(`来源：${l.sources.join('/')}`)
+  parts.push(`来源：${(l.sources ?? []).join('/')}`)
   return parts.join(' · ')
 }
 
@@ -568,7 +572,7 @@ function sideColor(side: string) {
             <span v-for="tag in levelTags(level)" :key="tag" class="level-tag">{{ tag }}</span>
           </span>
           <span class="level-dist">{{ formatPct(level.distancePct) }}</span>
-          <span class="level-strength" :title="levelTitle(level)">{{ levelStars(level) || '—' }}</span>
+          <span class="level-strength" :title="levelTitle(level)">{{ levelScore(level) }}</span>
         </div>
         <div v-if="!resistances.length" class="level-empty">上方暂无明显阻力</div>
       </div>
@@ -586,7 +590,7 @@ function sideColor(side: string) {
             <span v-for="tag in levelTags(level)" :key="tag" class="level-tag">{{ tag }}</span>
           </span>
           <span class="level-dist">{{ formatPct(level.distancePct) }}</span>
-          <span class="level-strength" :title="levelTitle(level)">{{ levelStars(level) || '—' }}</span>
+          <span class="level-strength" :title="levelTitle(level)">{{ levelScore(level) }}</span>
         </div>
         <div v-if="!supports.length" class="level-empty">下方暂无明显支撑</div>
       </div>
@@ -1367,11 +1371,10 @@ function sideColor(side: string) {
 }
 
 .level-strength {
-  width: 56px;
+  width: 40px;
   text-align: right;
   color: #f0b90b;
-  font-size: 10px;
-  letter-spacing: 1px;
+  font-size: 11px;
   flex: 0 0 auto;
 }
 

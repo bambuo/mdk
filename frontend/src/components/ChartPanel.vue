@@ -281,7 +281,7 @@ function applyLevels() {
   for (const level of a.levels) {
     const isResistance = level.kind === 'resistance'
     const name = isResistance ? `R${++r}` : `S${++s}`
-    const tags = level.sources.filter(x => x !== '摆动点')
+    const tags = (level.sources ?? []).filter(x => x !== '摆动点')   // ?? []：护栏，旧后端无该字段
     const suffix = tags.length ? ` ${tags.join('/')}` : level.touches > 0 ? ` ×${level.touches}` : ''
     priceLines.push(
       candleSeries.createPriceLine({
