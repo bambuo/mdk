@@ -70,6 +70,45 @@ internal static class WatchlistEndpoints
             })
             .WithSummary("移除监控交易对");
 
+        // SSE：监控列表内新入库的已确认缠论买卖点，实时推给前端（替代此前的 60s 前端轮询）。
+        // 事件过滤器在 WatchlistSignalBroadcaster（来源/确认/origin/监控成员），此处只负责传输与心跳。
+        app.MapGet("/api/watchlist/stream", async (
+                HttpContext context, WatchlistSignalBroadcaster hub, CancellationToken requestAborted) =>
+            {
+                var id = hub.Subscribe(out var reader);
+                context.Response.Headers.ContentType = "text/event-stream";
+                context.Response.Headers.CacheControl = "no-cache";
+                // SSE 注释行作为心跳：保活并让代理不判空闲（30s 一次）
+                using var heartbeat = new PeriodicTimer(TimeSpan.FromSeconds(30));
+                try
+                {
+                    await context.Response.Body.WriteAsync(": connected\n\n"u8.ToArray(), requestAborted);
+                    await context.Response.Body.FlushAsync(requestAborted);
+
+                    var readTask = Task.Run(async () =>
+                    {
+                        await foreach (var payload in reader.ReadAllAsync(requestAborted))
+                        {
+                            await context.Response.WriteAsync($"data: {payload}\n\n", requestAborted);
+                            await context.Response.Body.FlushAsync(requestAborted);
+                        }
+                    }, requestAborted);
+
+                    while (await heartbeat.WaitForNextTickAsync(requestAborted))
+                    {
+                        await context.Response.Body.WriteAsync(": ping\n\n"u8.ToArray(), requestAborted);
+                        await context.Response.Body.FlushAsync(requestAborted);
+                    }
+                }
+                catch (OperationCanceledException) { /* 客户端断开或停机，属正常退出 */ }
+                finally
+                {
+                    hub.Unsubscribe(id);
+                }
+                return Results.Empty;
+            })
+            .WithSummary("SSE：监控列表内新入库的已确认缠论买卖点（实时推送，替代前端轮询）");
+
         app.MapGet("/api/watchlist/signals", (
                 int? limit, WatchlistMonitorService monitor, SignalStore signals) =>
             {

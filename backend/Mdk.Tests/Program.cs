@@ -18,6 +18,7 @@ public static class Program
         StructurePositionTests.Register(kit);
         ConfigGuardTests.Register(kit);
         AttentionTests.Register(kit);
+        WatchlistSignalBroadcasterTests.Register(kit);
         WilderSmoothingTests.Register(kit);
         RsiTests.Register(kit);
         AtrTests.Register(kit);

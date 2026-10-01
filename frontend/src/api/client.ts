@@ -57,6 +57,37 @@ export function addWatchlist(market: MarketKind, symbol: string, intervals: stri
   return sendJson('/api/watchlist', 'POST', { market, symbol, intervals })
 }
 
+/** 监控列表新信号的载荷（服务端 SSE 推送） */
+export interface WatchlistStreamSignal {
+  market: string
+  symbol: string
+  baseAsset: string
+  quoteAsset: string
+  interval: string
+  kind: string | null
+  side: 'buy' | 'sell'
+  time: number
+  price: number
+  stopPrice: number | null
+  note: string | null
+}
+
+/**
+ * 订阅监控列表新信号（SSE，服务端在信号入库时实时推送；EventSource 自带断线重连）。
+ * 返回关闭函数。过滤（来源/确认/监控成员）在服务端完成。
+ */
+export function openWatchlistSignalStream(onSignal: (s: WatchlistStreamSignal) => void): () => void {
+  const es = new EventSource('/api/watchlist/stream')
+  es.onmessage = ev => {
+    try {
+      onSignal(JSON.parse(ev.data) as WatchlistStreamSignal)
+    } catch {
+      // 坏帧忽略（SSE 心跳为注释行，不会进 onmessage）
+    }
+  }
+  return () => es.close()
+}
+
 export function removeWatchlist(market: MarketKind, symbol: string): Promise<unknown> {
   return sendJson(`/api/watchlist?market=${market}&symbol=${encodeURIComponent(symbol)}`, 'DELETE')
 }

@@ -117,6 +117,12 @@ public sealed class SignalStore : IDisposable
         }
     }
 
+    /// <summary>
+    /// 新信号入库事件：仅在**成功插入**时触发（自然键重复不触发）。
+    /// 订阅方（如监控列表的 SSE 广播器）须自行过滤与容错——发布方不保证处理顺序与异常隔离之外的语义。
+    /// </summary>
+    public event Action<SignalEntry>? SignalRecorded;
+
     /// <summary>记录一条信号；自然键重复（同一信号已存在）返回 false。</summary>
     public bool TryRecord(SignalEntry e)
     {
@@ -158,6 +164,7 @@ public sealed class SignalStore : IDisposable
             using var idCmd = _conn.CreateCommand();
             idCmd.CommandText = "SELECT last_insert_rowid();";
             e.Id = Convert.ToInt64(idCmd.ExecuteScalar(), CultureInfo.InvariantCulture);
+            SignalRecorded?.Invoke(e);
             return true;
         }
     }

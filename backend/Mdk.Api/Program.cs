@@ -31,6 +31,8 @@ builder.Services.AddSingleton(sp => new WatchlistStore(
     Path.Combine(sp.GetRequiredService<IHostEnvironment>().ContentRootPath, "data"),
     sp.GetRequiredService<ILogger<WatchlistStore>>()));
 builder.Services.AddSingleton<WatchlistMonitorService>();
+// 监控列表信号广播器：订阅台账入库事件，供 SSE 端点推送
+builder.Services.AddSingleton<WatchlistSignalBroadcaster>();
 builder.Services.AddHostedService(sp => sp.GetRequiredService<WatchlistMonitorService>());
 builder.Services.AddSingleton<SignalBackfillService>();
 builder.Services.AddHostedService(sp => sp.GetRequiredService<SignalBackfillService>());

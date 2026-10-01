@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { Message } from '@arco-design/web-vue'
 import { onBeforeUnmount, onMounted, ref, watch } from 'vue'
-import { fetchAnalysis, fetchKlines, fetchSignalStats, fetchSymbols, fetchWatchlistSignals } from './api/client'
+import { fetchAnalysis, fetchKlines, fetchSignalStats, fetchSymbols, openWatchlistSignalStream } from './api/client'
 import { useKlineSocket } from './composables/useKlineSocket'
 import { useSignalNotify } from './composables/useSignalNotify'
 import AnalysisPanel from './components/AnalysisPanel.vue'
@@ -74,39 +74,27 @@ function notifyNewChanSignals(result: AnalysisResult) {
 }
 
 /**
- * 监控列表路径：无论当前在看哪个图表，监控列表内出现新的已确认信号都提醒。
- * 用 /api/watchlist/signals 轮询（后端已按监控列表过滤），只在提醒开启时轮询以省请求。
+ * 监控列表路径（SSE）：无论当前在看哪个图表，监控列表内**新入库**的已确认信号由服务端实时推送。
+ * 无历史回放（事件只在信号入库时产生），因此无需"首次标记"；开关关闭时关闭连接。
  */
-let watchlistTimer: ReturnType<typeof setInterval> | null = null
-let watchlistPrimed = false
+let closeWatchlistStream: (() => void) | null = null
 
-async function pollWatchlistSignals() {
-  if (!notifyEnabled.value) return
-  try {
-    const rows = await fetchWatchlistSignals(50)
-    const items = rows.filter(r => r.source === '缠论' && r.isConfirmed).map(r => ({
-      symbol: r.symbol, baseAsset: r.baseAsset, quoteAsset: r.quoteAsset,
-      interval: r.interval, side: r.side, time: r.time, note: r.note,
-      price: r.price, stopPrice: r.stopPrice,
-    }))
-    if (!watchlistPrimed) {            // 首次轮询：全部标记已见，不打扰
-      primeSeen(items)
-      watchlistPrimed = true
-      return
-    }
-    notify(items)
-  } catch {
-    // 轮询失败静默（下一轮再试），不影响页面
+function syncWatchlistStream() {
+  if (notifyEnabled.value && !closeWatchlistStream) {
+    closeWatchlistStream = openWatchlistSignalStream(s => notify([{
+      symbol: s.symbol, baseAsset: s.baseAsset, quoteAsset: s.quoteAsset,
+      interval: s.interval, side: s.side, time: s.time, note: s.note,
+      price: s.price, stopPrice: s.stopPrice,
+    }]))
+  } else if (!notifyEnabled.value && closeWatchlistStream) {
+    closeWatchlistStream()
+    closeWatchlistStream = null
   }
 }
 
-onMounted(() => {
-  watchlistTimer = setInterval(pollWatchlistSignals, 60_000)
-  void pollWatchlistSignals()
-})
-onBeforeUnmount(() => {
-  if (watchlistTimer) clearInterval(watchlistTimer)
-})
+watch(notifyEnabled, syncWatchlistStream)
+onMounted(syncWatchlistStream)
+onBeforeUnmount(() => closeWatchlistStream?.())
 
 const loading = ref(false)
 const errorMsg = ref('')
