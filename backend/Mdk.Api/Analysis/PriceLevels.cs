@@ -40,7 +40,22 @@ public sealed class PriceLevelOptions
 
     /// <summary>实线阈值（强度分）：低于此值的位点在图上画虚线。</summary>
     public decimal SolidScore { get; set; } = 2m;
+
+    /// <summary>是否并入成交量分布锚点（POC / 价值区沿 / 高量与低量节点）。</summary>
+    public bool UseVolumeProfile { get; set; } = true;
+
+    /// <summary>成交量分布的统计天数（用 1 分钟K线，区间内成交量在K线区间均摊——近似，见 VolumeProfile）。</summary>
+    public int ProfileDays { get; set; } = 14;
+
+    /// <summary>成交量分布的分箱数（箱数越多越细，也越容易受噪音影响）。</summary>
+    public int ProfileBins { get; set; } = 100;
+
+    /// <summary>启动后预热成交量分布的延迟（秒）：避开启动时的取数高峰。</summary>
+    public int ProfileWarmupDelaySeconds { get; set; } = 30;
 }
+
+/// <summary>外部锚点（成交量分布等）：与位点重合时**只标注来源、不加分**。</summary>
+public readonly record struct PriceAnchor(decimal Price, string Label);
 
 /// <summary>
 /// 支撑/阻力位点（纯函数，可独立测试）。口径 v2（2026-10-01）：
@@ -82,7 +97,10 @@ public static class PriceLevels
         return swings;
     }
 
-    public static IReadOnlyList<PriceLevel> Analyze(IReadOnlyList<Candle> candles, PriceLevelOptions options)
+    public static IReadOnlyList<PriceLevel> Analyze(
+        IReadOnlyList<Candle> candles,
+        PriceLevelOptions options,
+        IReadOnlyList<PriceAnchor>? externalAnchors = null)
     {
         if (candles.Count < 10) return [];
         var n = candles.Count;
@@ -107,7 +125,9 @@ public static class PriceLevels
 
         if (options.Anchors)
         {
-            foreach (var (price, label) in Anchors(candles, last.Close))
+            var anchors = Anchors(candles, last.Close)
+                .Concat((externalAnchors ?? []).Select(a => (a.Price, a.Label)));
+            foreach (var (price, label) in anchors)
             {
                 var cluster = clusters.FirstOrDefault(c => Math.Abs(price - c.Mean) <= tolerance);
                 if (cluster is null) clusters.Add(new Cluster(price, label));

@@ -10,6 +10,7 @@ public sealed class AnalysisService(
     BinanceRestClient rest,
     IOptions<Chan.ChanOptions> chanOptions,
     IOptions<PriceLevelOptions> levelOptions,
+    VolumeProfileService profileService,
     SignalStore store)
 {
     private static readonly TimeSpan HtfCacheTtl = TimeSpan.FromSeconds(60);
@@ -117,10 +118,30 @@ public sealed class AnalysisService(
 
         var result = AnalysisEngine.Compute(market, pair, interval, candles, htf, htfInterval,
             chanOptions, chanWindow, subLevel, subLevelInterval, lowerLevel, lowerLevelInterval,
-            levelCandles, _levelOptions, levelsBasis);
+            levelCandles, _levelOptions, levelsBasis, ProfileAnchors(market, pair));
         RecordSignals(market, pair, interval, result);
         var leverage = await BuildLeverageAsync(market, pair, candles, ct);
         return result with { Evidence = GetEvidenceCached(market, interval), Leverage = leverage };
+    }
+
+    /// <summary>
+    /// 成交量分布锚点（POC / 价值区沿 / 高量与低量节点）：来自后台构建的缓存，未就绪返回 null
+    /// （并已触发构建，数秒后的下一次分析即带上）。分箱均摊口径见 <see cref="VolumeProfile"/>。
+    /// </summary>
+    private IReadOnlyList<PriceAnchor>? ProfileAnchors(MarketKind market, TradingPair pair)
+    {
+        var profile = profileService.TryGet(market, pair);
+        if (profile is null) return null;
+
+        var anchors = new List<PriceAnchor>
+        {
+            new(profile.Poc, "成交量POC"),
+            new(profile.VaHigh, "价值区上沿"),
+            new(profile.VaLow, "价值区下沿"),
+        };
+        anchors.AddRange(profile.Hvn.Select(p => new PriceAnchor(p, "高量节点")));
+        anchors.AddRange(profile.Lvn.Select(p => new PriceAnchor(p, "低量节点")));
+        return anchors;
     }
 
     /// <summary>

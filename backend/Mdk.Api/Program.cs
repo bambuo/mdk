@@ -30,6 +30,9 @@ builder.Services.AddHttpClient<BinanceRestClient>(client => client.Timeout = Tim
     });
 builder.Services.AddSingleton<SymbolCatalog>();
 builder.Services.AddSingleton<KlineStreamService>();
+// 成交量分布：后台构建 + 内存缓存（按 UTC 日失效），分析请求只读缓存不阻塞
+builder.Services.AddSingleton<VolumeProfileService>();
+builder.Services.AddHostedService(sp => sp.GetRequiredService<VolumeProfileService>());
 builder.Services.AddSingleton<AnalysisService>();
 builder.Services.AddSingleton(sp => new SignalStore(
     Path.Combine(sp.GetRequiredService<IHostEnvironment>().ContentRootPath, "data"),

@@ -25,7 +25,8 @@ public static class AnalysisEngine
         string? lowerLevelInterval = null,
         IReadOnlyList<Candle>? levelCandles = null,
         PriceLevelOptions? levelOptions = null,
-        string levelsBasis = "last")
+        string levelsBasis = "last",
+        IReadOnlyList<PriceAnchor>? levelAnchors = null)
     {
         var closes = candles.Select(c => c.Close).ToArray();
         var highs = candles.Select(c => c.High).ToArray();
@@ -43,7 +44,7 @@ public static class AnalysisEngine
         var trend = TrendAnalyzer.Analyze(candles, ema50, ema200, dmi);
         // 位点在**固定内部窗口**上计算（与显示窗口解耦）：否则同一行情会随显示窗口给出不同位点。
         // 合约默认用标记价K线（防插针），窗口与价格基础均由 AnalysisService 决定。
-        var levels = PriceLevels.Analyze(levelCandles ?? candles, levelOptions ?? new PriceLevelOptions());
+        var levels = PriceLevels.Analyze(levelCandles ?? candles, levelOptions ?? new PriceLevelOptions(), levelAnchors);
 
         // 信号发生时的市场状态（ADX 强度 / 波动率 / 带宽），用于事后状态依赖统计
         SignalRegime RegimeAt(int i)
