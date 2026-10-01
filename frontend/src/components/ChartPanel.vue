@@ -238,7 +238,9 @@ function applyOverlayLines() {
   chanZdSeries?.setData([])
   const pivots = a.chan?.pivots ?? []
   const bands: PivotBand[] = []
-  if (props.toggles.chan) {
+  // 中枢由独立开关控制（与「缠论结构」分开）：关掉中枢仍可看笔折线，反之亦然
+  const showPivots = props.toggles.chan && props.toggles.pivots
+  if (showPivots) {
     for (const level of a.chanLevels ?? []) {
       if (level.role !== 'primary' && !props.toggles.multiLevel) continue   // 多级别关闭时只画本级别
       for (const p of level.pivots) {
@@ -258,7 +260,7 @@ function applyOverlayLines() {
   for (const line of pivotPriceLines) candleSeries?.removePriceLine(line)
   pivotPriceLines = []
   const latest = pivots[pivots.length - 1]
-  if (latest && candleSeries) {
+  if (showPivots && latest && candleSeries) {
     pivotPriceLines.push(candleSeries.createPriceLine({
       price: latest.zg, color: 'rgba(214,150,235,0.85)', lineWidth: 1,
       lineStyle: LineStyle.Solid, axisLabelVisible: true, title: 'ZG',

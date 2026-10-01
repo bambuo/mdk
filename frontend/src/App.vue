@@ -21,6 +21,7 @@ const interval = ref('1h')
 // 纯缠论：缠论图层默认开；EMA/RSI/MACD 仅作图表指标（不再产生信号）；BOLL 与支撑阻力线默认关
 const toggles = ref<Toggles>({
   chan: true,
+  pivots: true,
   multiLevel: true,
   ema: true,
   rsi: true,

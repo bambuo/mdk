@@ -293,8 +293,10 @@ export interface Toggles {
   boll: boolean
   levels: boolean
   signals: boolean
-  /** 缠论图层：笔折线 + 中枢带 + 分型点 */
+  /** 缠论结构：笔折线（结构骨架） */
   chan: boolean
+  /** 中枢：中枢色带 + 最新中枢的 ZG/ZD 价格线（与「缠论结构」独立开关） */
+  pivots: boolean
   /** 多级别叠加：同时显示高周期与次级别中枢（宽/细色带） */
   multiLevel: boolean
 }

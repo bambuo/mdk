@@ -66,9 +66,10 @@ const intervals = ['5m', '15m', '30m', '1h', '4h', '1d', '1w']
  * 图层开关分两档：主开关（结构、信号）常显，其余收进「更多图层」——
  * 常显项决定页面在讲什么，收起项是分析辅助，避免工具栏一行九个勾选框。
  */
-const primaryItems: { key: keyof Toggles; label: string }[] = [
-  { key: 'chan', label: '缠论结构' },
-  { key: 'signals', label: '缠论买卖点' },
+const primaryItems: { key: keyof Toggles; label: string; hint: string }[] = [
+  { key: 'chan', label: '缠论结构', hint: '笔折线（结构骨架）；中枢由「中枢」开关单独控制' },
+  { key: 'pivots', label: '中枢', hint: '中枢色带 + 最新中枢的 ZG/ZD 价格线——缠论的核心结构（多级别叠加可在「更多图层」里开）' },
+  { key: 'signals', label: '缠论买卖点', hint: '已确认的 1/2/3 类买卖点标记；记账在结构确认那根K线（无未来函数）' },
 ]
 
 const secondaryItems: { key: keyof Toggles; label: string; hint: string }[] = [
@@ -187,7 +188,9 @@ const displayChangePct = computed(() => {
     </a-radio-group>
 
     <a-checkbox-group v-model="primaryKeys" class="toggles" size="small">
-      <a-checkbox v-for="item in primaryItems" :key="item.key" :value="item.key">{{ item.label }}</a-checkbox>
+      <a-checkbox v-for="item in primaryItems" :key="item.key" :value="item.key" :title="item.hint">
+        {{ item.label }}
+      </a-checkbox>
     </a-checkbox-group>
 
     <a-popover trigger="click" position="bl" :content-style="{ padding: '10px 12px' }">
