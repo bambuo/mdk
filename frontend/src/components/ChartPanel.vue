@@ -388,6 +388,10 @@ onMounted(() => {
   chart = createChart(container.value, {
     autoSize: true,
     layout: {
+      // 关闭库自带的 TradingView 署名 logo（用户要求）。
+      // 说明：lightweight-charts 为 Apache-2.0，署名非许可证强制项，但 TradingView 在文档中
+      // 请求保留该 logo；本项目为本地自用工具，故按用户要求关闭。
+      attributionLogo: false,
       background: { type: ColorType.Solid, color: '#0e1013' },
       textColor: '#9aa3b0',
       panes: {
