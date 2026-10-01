@@ -17,6 +17,7 @@ public static class Program
         EvidenceTests.Register(kit);
         StructurePositionTests.Register(kit);
         ConfigGuardTests.Register(kit);
+        LocalSettingsTests.Register(kit);
         AttentionTests.Register(kit);
         WatchlistSignalBroadcasterTests.Register(kit);
         FeishuNotifierTests.Register(kit);

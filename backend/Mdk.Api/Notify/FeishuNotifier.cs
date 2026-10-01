@@ -3,6 +3,7 @@ using System.Text;
 using System.Text.Json;
 using System.Threading.Channels;
 using Mdk.Api.Analysis;
+using Mdk.Api.Configuration;
 using Microsoft.Extensions.Options;
 
 namespace Mdk.Api.Notify;
@@ -42,7 +43,10 @@ public sealed class FeishuNotifier : BackgroundService
         if (_options.IsConfigured)
             _logger.LogInformation("飞书提醒已启用（同向冷却 {Minutes} 分钟）", _options.CooldownMinutes);
         else
-            _logger.LogInformation("飞书提醒未配置（Feishu:WebhookUrl 为空）——跳过发送；如需启用见 README 配置说明");
+            _logger.LogInformation(
+                "飞书提醒未配置（Feishu:WebhookUrl 为空）——跳过发送；" +
+                "填写 {Local}（本机，已 gitignore）或设环境变量 Feishu__WebhookUrl 后重启即可启用",
+                LocalSettings.FileName);
     }
 
     /// <summary>入队（非阻塞；在 SignalStore 写锁内被调用）。</summary>
@@ -112,7 +116,8 @@ public sealed class FeishuNotifier : BackgroundService
     /// <summary>自检：发一条示例卡片（不参与冷却，供 /api/notify/feishu/test 使用）。</summary>
     public async Task<(bool Ok, string Detail)> SendTestAsync(CancellationToken ct)
     {
-        if (!_options.IsConfigured) return (false, "未配置 Feishu:WebhookUrl（在 appsettings.json 的 Feishu 节填写后重试）");
+        if (!_options.IsConfigured)
+            return (false, $"未配置 Feishu:WebhookUrl（写入 {LocalSettings.FileName} 或设环境变量 Feishu__WebhookUrl 后重试）");
         var sample = new NotifiableSignal(
             Market: "spot", Symbol: "BTCUSDT", BaseAsset: "BTC", QuoteAsset: "USDT", Interval: "1h",
             Kind: "3买", Side: "buy", Time: DateTimeOffset.UtcNow.ToUnixTimeSeconds(),

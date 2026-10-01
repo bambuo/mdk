@@ -7,6 +7,9 @@ obj/
 node_modules/
 dist/
 
+# 本机密钥（飞书 Webhook/Secret 等）——凭据一律不入版本控制，生产用环境变量注入
+appsettings.Local.json
+
 # 本地日志
 *.log
 

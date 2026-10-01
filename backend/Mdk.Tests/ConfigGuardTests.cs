@@ -3,6 +3,7 @@ using System.Text.Json;
 using Mdk.Api.Analysis;
 using Mdk.Api.Analysis.Chan;
 using Mdk.Api.Binance;
+using Mdk.Api.Configuration;
 using Mdk.Api.Notify;
 
 namespace Mdk.Tests;
@@ -14,9 +15,11 @@ namespace Mdk.Tests;
 /// （`Binance.FuturesWsBaseUrl`），代码改成正确的分区地址后**被配置静默覆盖**，
 /// 于是"修了却不生效"。副本还会掩盖重命名——键名拼错/属性改名后配置被静默忽略。
 ///
-/// 两道断言：
+/// 四道断言：
 ///   ① 每个配置键必须在对应 Options 类型上存在（防拼写错误与属性改名后的残留）；
-///   ② 每个配置值必须与代码默认值**不同**（防冗余副本掩盖代码修复）。
+///   ② 每个配置值必须与代码默认值**不同**（防冗余副本掩盖代码修复）；
+///   ③ 受版本控制的配置里不得出现凭据（飞书 Webhook 等价于该群的发消息权限，随提交进 git 历史即等于公开）；
+///   ④ 本机密钥文件必须在 .gitignore 里——③④ 是一对：凭据只能待在不被跟踪的文件或环境变量中。
 /// </summary>
 public static class ConfigGuardTests
 {
@@ -60,6 +63,55 @@ public static class ConfigGuardTests
                 }
             }
         });
+
+        t.Case("配置守卫_受版本控制的配置不得含凭据", () =>
+        {
+            var path = FindAppSettings();
+            Assert.True(path is not null, "未找到 Mdk.Api/appsettings.json");
+            using var doc = JsonDocument.Parse(File.ReadAllText(path!));
+
+            AssertNoCredentials(doc.RootElement, "");
+        });
+
+        t.Case("配置守卫_本机密钥文件必须被 gitignore 忽略", () =>
+        {
+            var path = FindRepoFile(".gitignore");
+            Assert.True(path is not null, "未找到仓库根 .gitignore");
+            var text = File.ReadAllText(path!);
+
+            Assert.True(text.Contains(LocalSettings.FileName, StringComparison.Ordinal),
+                $".gitignore 必须忽略 {LocalSettings.FileName}——凭据文件一旦被跟踪，提交即等于公开");
+        });
+    }
+
+    /// <summary>递归扫描：键名疑似凭据而值非空即失败（凭据只允许出现在本机密钥文件或环境变量中）。</summary>
+    private static void AssertNoCredentials(JsonElement element, string path)
+    {
+        switch (element.ValueKind)
+        {
+            case JsonValueKind.Object:
+                foreach (var prop in element.EnumerateObject())
+                    AssertNoCredentials(prop.Value, path.Length == 0 ? prop.Name : $"{path}:{prop.Name}");
+                break;
+            case JsonValueKind.String:
+                if (LooksLikeCredential(path) && !string.IsNullOrWhiteSpace(element.GetString()))
+                {
+                    throw new InvalidOperationException(
+                        $"受版本控制的配置里出现凭据 “{path}”——请移入 {LocalSettings.FileName}（已 gitignore）" +
+                        "或改用环境变量（如 Feishu__WebhookUrl）");
+                }
+                break;
+        }
+    }
+
+    private static bool LooksLikeCredential(string path)
+    {
+        var key = path.Split(':')[^1];
+        return key.Contains("Secret", StringComparison.OrdinalIgnoreCase)
+            || key.Contains("Webhook", StringComparison.OrdinalIgnoreCase)
+            || key.Contains("Token", StringComparison.OrdinalIgnoreCase)
+            || key.Contains("Password", StringComparison.OrdinalIgnoreCase)
+            || key.Contains("ApiKey", StringComparison.OrdinalIgnoreCase);
     }
 
     /// <summary>把 JSON 值与本机值都规整成同一字符串形式，便于比较（去引号、统一小写、数组按元素拼接）。</summary>
@@ -90,6 +142,19 @@ public static class ConfigGuardTests
         while (dir is not null)
         {
             var candidate = Path.Combine(dir.FullName, "Mdk.Api", "appsettings.json");
+            if (File.Exists(candidate)) return candidate;
+            dir = dir.Parent;
+        }
+        return null;
+    }
+
+    /// <summary>从测试输出目录向上找到仓库根下的文件（.gitignore 等）。</summary>
+    private static string? FindRepoFile(string fileName)
+    {
+        var dir = new DirectoryInfo(AppContext.BaseDirectory);
+        while (dir is not null)
+        {
+            var candidate = Path.Combine(dir.FullName, fileName);
             if (File.Exists(candidate)) return candidate;
             dir = dir.Parent;
         }

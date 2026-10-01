@@ -9,11 +9,15 @@ namespace Mdk.Api.Notify;
 /// <summary>
 /// 飞书（Feishu/Lark）自定义机器人配置。**未配置即禁用**：<see cref="WebhookUrl"/> 为空时不发送任何请求。
 ///
-/// appsettings 示例（只在需要覆盖默认值时写入——见配置守卫测试）：
+/// 凭据**不得写入受版本控制的 appsettings.json**（Webhook 等价于该群的发消息权限，随提交进入 git 历史即等于公开）。
+/// 填写位置见 <see cref="Mdk.Api.Configuration.LocalSettings"/>：
+/// 本机写 appsettings.Local.json（已 gitignore），生产用环境变量 <c>Feishu__WebhookUrl</c> / <c>Feishu__Secret</c>。
 /// <code>
-/// "Feishu": {
-///   "WebhookUrl": "https://open.feishu.cn/open-apis/bot/v2/hook/xxxxxxxx",
-///   "Secret": "签名校验密钥（机器人开启"签名校验"时必填，否则留空）"
+/// {
+///   "Feishu": {
+///     "WebhookUrl": "https://open.feishu.cn/open-apis/bot/v2/hook/xxxxxxxx",
+///     "Secret": "签名校验密钥（机器人开启"签名校验"时必填，否则留空）"
+///   }
 /// }
 /// </code>
 /// </summary>

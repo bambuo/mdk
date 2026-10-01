@@ -90,14 +90,22 @@ frontend/
 
 监控列表内出现**新的已确认缠论买卖点**时，推送到飞书群（关页面也能收；桌面提醒仅在页面打开时生效）。
 
-配置（`backend/Mdk.Api/appsettings.json`，**只需写这两项**；配置守卫要求"与默认值相同的副本不写"）：
+**凭据不入版本控制**：Webhook 等于该群的发消息权限，写进受跟踪的文件就是随提交公开（改代码删不掉 git 历史里的旧值）。
+本机填 `backend/Mdk.Api/appsettings.Local.json`（已在 `.gitignore` 中，无需改代码、重启即生效）：
 
 ```json
-"Feishu": {
-  "WebhookUrl": "https://open.feishu.cn/open-apis/bot/v2/hook/你的-机器人-token",
-  "Secret": "开启签名校验时填写；未开启则留空"
+{
+  "Feishu": {
+    "WebhookUrl": "https://open.feishu.cn/open-apis/bot/v2/hook/你的-机器人-token",
+    "Secret": "开启签名校验时填写；未开启则留空"
+  }
 }
 ```
+
+部署环境改用环境变量注入（优先级高于本机文件）：`Feishu__WebhookUrl` / `Feishu__Secret`。
+优先级顺序：`appsettings.json` < `appsettings.{环境}.json` < `appsettings.Local.json` < 环境变量 < 命令行。
+非凭据的旋钮（`CooldownMinutes` / `TimeoutSeconds`）若需覆盖默认值，仍写进 `appsettings.json` 的 `Feishu` 节
+（配置守卫要求"与默认值相同的副本不写"）。
 
 获取方式：飞书群 → 设置 → 群机器人 → 添加机器人 → 自定义机器人 → 复制 Webhook 地址。
 若机器人开启了"签名校验"，必须把密钥填进 `Secret`（否则飞书返回 `19021 签名校验失败`）。

@@ -936,6 +936,44 @@ vue-tsc + 构建通过。
 自带测试 **155/155**；构建 0 警告 0 错误；重启实测：不存在交易对返回本地清晰错误、
 正常交易对正常、空 symbol 的 WS 请求仍 400。
 
+## 0.32 凭据移出版本控制（2026-10-01，用户："肯定要移出版本控制的，这是基本常识"）
+
+飞书 Webhook 与签名密钥此前写在受版本控制的 `appsettings.json` 里，并随提交 `2266133` 进入 git 历史。
+Webhook 等价于**该群的发消息权限**：一旦进历史即等于公开，且"再提交一次删掉"收不回历史里的旧值——
+唯一有效的补救是在飞书群重置机器人地址（使旧值失效）。此事留待用户决定，见文末"遗留"。
+
+### 做法：凭据只待在不被跟踪的地方
+| 位置 | 用途 | 优先级 |
+|---|---|---|
+| `appsettings.json`（受跟踪） | 只留非凭据的真实覆盖项 | 最低 |
+| `appsettings.Local.json`（**已 gitignore**） | 本机凭据 | 高于 appsettings 系列 |
+| 环境变量 `Feishu__WebhookUrl` / `Feishu__Secret` | 部署环境注入 | 最高（命令行除外） |
+
+- `Mdk.Api/Configuration/LocalSettings.cs`：把本机文件**插到环境变量源之前**（`Sources.Insert`）——
+  优先级由插入位置决定，而非调用顺序，故不能用 `AddJsonFile` 直接追加（那会让本机文件压过环境变量，
+  误部署本机文件即静默覆盖注入的凭据）。文件缺失即静默跳过：**"未配置"是正常状态，不是错误**。
+- `appsettings.json` 的 `Feishu` 节整体删除（凭据与默认副本都不写）；非凭据旋钮（冷却/超时）如需覆盖仍可写回。
+- 代码内提示与 README 一律指向本机文件与环境变量，不再指向 appsettings.json。
+
+### 守卫：把"基本常识"变成会失败的测试
+- `配置守卫_受版本控制的配置不得含凭据`：递归扫描 appsettings.json，键名疑似凭据
+  （Webhook / Secret / Token / Password / ApiKey）且值非空即失败；
+- `配置守卫_本机密钥文件必须被 gitignore 忽略`：.gitignore 必须含 `appsettings.Local.json`
+  （与上一条成对：凭据只能待在不被跟踪的文件或环境变量里）；
+- `本机配置_*` 三例：文件被读入 / 环境变量优先 / 缺失静默跳过。用 `ConfigurationManager`
+  （与 Program.cs 的 `builder.Configuration` 同类型）而非裸 `ConfigurationBuilder`——
+  "优先级靠插入位置"这一实现细节只在该类型上成立，用错类型会得到假绿。
+
+### 验证
+自带测试 **160/160**（新增 5 例）；构建 0 警告 0 错误。另起**独立实例**实跑（临时内容根，自带空 data/，
+不碰真实台账、不发飞书消息）：
+- 只放本机文件 → `GET /api/notify/feishu` = `已配置（…425f6b，签名校验=开）`，启动日志"飞书提醒已启用"；
+- 本机文件 + `Feishu__WebhookUrl=https://example.com/hook/ENVONLY` → `…NVONLY`，**环境变量胜出**。
+
+### 遗留
+1. git 历史（提交 `2266133`、`b5505b5`，均已推送）中的旧 Webhook 与密钥仍在，改代码删不掉；
+2. 是否改写历史（需 force push）与是否轮换 webhook，由用户拍板。
+
 ## 1. 目录结构（全新项目 /Users/johana/Desktop/mdk）
 ```
 mdk/

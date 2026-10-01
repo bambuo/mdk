@@ -4,12 +4,17 @@ using System.Text.Json.Serialization;
 using Mdk.Api.Analysis;
 using Mdk.Api.Analysis.Chan;
 using Mdk.Api.Binance;
+using Mdk.Api.Configuration;
 using Mdk.Api.Domain;
 using Mdk.Api.Endpoints;
 using Mdk.Api.Notify;
 using Microsoft.Extensions.Options;
 
 var builder = WebApplication.CreateBuilder(args);
+
+// 本机密钥（飞书 Webhook/Secret）不入版本控制：写在 appsettings.Local.json（已 gitignore），
+// 生产环境用环境变量 Feishu__WebhookUrl / Feishu__Secret 注入；优先级见 LocalSettings。
+LocalSettings.Add(builder.Configuration, builder.Environment.ContentRootPath);
 
 builder.Services.Configure<BinanceOptions>(builder.Configuration.GetSection(BinanceOptions.SectionName));
 builder.Services.Configure<SignalOptions>(builder.Configuration.GetSection(SignalOptions.SectionName));
