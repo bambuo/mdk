@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, ref } from 'vue'
-import type { AnalysisResult, EvidenceBucket, SignalStatsResponse, TradeSignal } from '../types'
+import type { AnalysisResult, EvidenceBucket, PriceLevel, SignalStatsResponse, TradeSignal } from '../types'
 import { formatPct, formatPrice, formatTime, formatTimeFull } from '../utils'
 
 const props = defineProps<{
@@ -26,6 +26,31 @@ const namedLevels = computed(() => {
 
 const resistances = computed(() => namedLevels.value.filter(l => l.kind === 'resistance'))
 const supports = computed(() => namedLevels.value.filter(l => l.kind === 'support'))
+
+/** 位点强度星：按加权强度分（未测试的客观锚点为 0 → 不画星） */
+function levelStars(l: PriceLevel): string {
+  return '★'.repeat(Math.min(Math.round(l.score), 5))
+}
+
+/** 位点来源标签：摆动点是基准口径，不再重复标注 */
+function levelTags(l: PriceLevel): string[] {
+  return l.sources.filter(s => s !== '摆动点')
+}
+
+/** 位点悬停说明：强度构成与来源（回答"这条线凭什么在这里"） */
+function levelTitle(l: PriceLevel): string {
+  const parts = [`强度 ${l.score.toFixed(1)}`]
+  parts.push(l.touches > 0 ? `触碰 ${l.touches} 次` : '尚未被触碰（客观锚点）')
+  if (l.reactionAtr != null) parts.push(`平均反应 ${l.reactionAtr.toFixed(1)}×ATR`)
+  if (l.ageBars != null) parts.push(`最近触碰在 ${l.ageBars} 根前`)
+  parts.push(`来源：${l.sources.join('/')}`)
+  return parts.join(' · ')
+}
+
+/** 位点的价格基础（合约默认用标记价：强平插针不算破位） */
+const levelsBasisNote = computed(() =>
+  props.analysis?.levelsBasis === 'mark' ? '合约按标记价计算（防插针）' : '',
+)
 
 /** 级别共振筛选：all=全部，aligned=只看"级别共振"信号 */
 const confluenceOnly = ref(false)
@@ -527,6 +552,7 @@ function sideColor(side: string) {
       <h3 class="card-title">
         关键点位
         <span class="card-sub">点击在图上定位</span>
+        <span v-if="levelsBasisNote" class="card-sub">{{ levelsBasisNote }}</span>
       </h3>
       <div class="level-group">
         <div class="level-caption resistance">阻力</div>
@@ -538,8 +564,11 @@ function sideColor(side: string) {
         >
           <span class="level-name r">{{ level.name }}</span>
           <span class="level-price">{{ formatPrice(level.price) }}</span>
+          <span v-if="levelTags(level).length" class="level-tags">
+            <span v-for="tag in levelTags(level)" :key="tag" class="level-tag">{{ tag }}</span>
+          </span>
           <span class="level-dist">{{ formatPct(level.distancePct) }}</span>
-          <span class="level-strength" :title="`触碰 ${level.strength} 次`">{{ '★'.repeat(Math.min(level.strength, 5)) }}</span>
+          <span class="level-strength" :title="levelTitle(level)">{{ levelStars(level) || '—' }}</span>
         </div>
         <div v-if="!resistances.length" class="level-empty">上方暂无明显阻力</div>
       </div>
@@ -553,8 +582,11 @@ function sideColor(side: string) {
         >
           <span class="level-name s">{{ level.name }}</span>
           <span class="level-price">{{ formatPrice(level.price) }}</span>
+          <span v-if="levelTags(level).length" class="level-tags">
+            <span v-for="tag in levelTags(level)" :key="tag" class="level-tag">{{ tag }}</span>
+          </span>
           <span class="level-dist">{{ formatPct(level.distancePct) }}</span>
-          <span class="level-strength" :title="`触碰 ${level.strength} 次`">{{ '★'.repeat(Math.min(level.strength, 5)) }}</span>
+          <span class="level-strength" :title="levelTitle(level)">{{ levelStars(level) || '—' }}</span>
         </div>
         <div v-if="!supports.length" class="level-empty">下方暂无明显支撑</div>
       </div>
@@ -1340,6 +1372,24 @@ function sideColor(side: string) {
   color: #f0b90b;
   font-size: 10px;
   letter-spacing: 1px;
+  flex: 0 0 auto;
+}
+
+/* 客观锚点标签（前日高/整数关口/日VWAP 等）：说明这条线凭什么在这里 */
+.level-tags {
+  display: flex;
+  gap: 3px;
+  flex: 0 0 auto;
+}
+
+.level-tag {
+  font-size: 10px;
+  line-height: 15px;
+  padding: 0 4px;
+  border-radius: 3px;
+  color: #9aa3b0;
+  background: rgba(255, 255, 255, 0.06);
+  white-space: nowrap;
 }
 
 .level-empty {

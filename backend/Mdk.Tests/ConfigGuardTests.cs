@@ -40,6 +40,7 @@ public static class ConfigGuardTests
                 ["Binance"] = typeof(BinanceOptions),
                 ["Signal"] = typeof(SignalOptions),
                 ["Chan"] = typeof(ChanOptions),
+                ["Levels"] = typeof(PriceLevelOptions),
                 ["Backfill"] = typeof(BackfillOptions),
                 ["Feishu"] = typeof(FeishuOptions),
             };

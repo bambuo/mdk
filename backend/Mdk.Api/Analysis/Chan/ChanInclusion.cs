@@ -6,7 +6,7 @@ namespace Mdk.Api.Analysis.Chan;
 /// 缠论第一步：K线包含关系处理（合并K线）。
 /// 存在包含关系（一根完全覆盖另一根，含等高等价的平台）时按方向合并：
 /// 向上处理取"高高"（两者最高取高、最低取高），向下处理取"低低"。
-/// 与 SupportResistance.FindSwings 的 ±3 严格分形不同，此处按缠论规则正确处理平台/等高价，
+/// 与 PriceLevels.FindSwings 的 ±3 严格分形不同，此处按缠论规则正确处理平台/等高价，
 /// 且不做左右对称的未来确认（确认时点由分型的 ConfirmBarIndex 显式表达）。
 /// </summary>
 public static class ChanInclusion

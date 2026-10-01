@@ -9,6 +9,7 @@ namespace Mdk.Api.Analysis;
 public sealed class AnalysisService(
     BinanceRestClient rest,
     IOptions<Chan.ChanOptions> chanOptions,
+    IOptions<PriceLevelOptions> levelOptions,
     SignalStore store)
 {
     private static readonly TimeSpan HtfCacheTtl = TimeSpan.FromSeconds(60);
@@ -20,6 +21,8 @@ public sealed class AnalysisService(
 
     private readonly Chan.ChanOptions _chanOptions = chanOptions.Value;
 
+    private readonly PriceLevelOptions _levelOptions = levelOptions.Value;
+
     private readonly ConcurrentDictionary<string, (IReadOnlyList<Models.Candle> Candles, DateTimeOffset At)> _htfCache =
         new();
 
@@ -28,14 +31,38 @@ public sealed class AnalysisService(
     {
         var chanOptions = _chanOptions;
 
-        // 缠论使用固定内部窗口（最近 AnalysisBars 根），与显示窗口解耦——保证结构与信号可复现；
-        // 因此取数上限需覆盖两者中较大者。
+        // 缠论与位点都用固定内部窗口（最近 N 根），与显示窗口解耦——保证结构与位点可复现；
+        // 因此取数上限需覆盖三者中较大者。
         var chanBars = chanOptions.Enabled ? chanOptions.AnalysisBars : 0;
-        var fetchBars = Math.Clamp(Math.Max(limit, chanBars), 250, 1500);
+        var levelBars = _levelOptions.AnalysisBars;
+        var fetchBars = Math.Clamp(Math.Max(Math.Max(limit, chanBars), levelBars), 250, 1500);
         var fetched = await rest.GetKlinesAsync(market, pair, interval, fetchBars, ct);
         if (fetched.Length == 0)
             throw new BinanceException(-1, $"暂无K线数据：{pair.Display} {interval}");
-        var (candles, chanWindow) = Chan.ChanWindowSelector.Select(fetched, limit, chanBars);
+        var windows = AnalysisWindows.Select(fetched, limit, chanBars, levelBars);
+        var candles = windows.Display;
+        var chanWindow = windows.Chan;
+
+        // 位点的价格基础：合约默认改用**标记价**K线（强平插针会在最新价K线上造出假极值，
+        // 行业惯例用标记价衡量风险位；是否更优未检验）。拿不到时回落最新价，不阻塞分析。
+        var levelCandles = windows.Levels;
+        var levelsBasis = "last";
+        if (market == MarketKind.Futures && _levelOptions.UseMarkPriceForFutures && levelBars > 0)
+        {
+            try
+            {
+                var mark = await rest.GetMarkPriceKlinesAsync(pair, interval, fetchBars, ct);
+                if (mark.Length >= 100)
+                {
+                    levelCandles = AnalysisWindows.Tail(mark, levelBars);
+                    levelsBasis = "mark";
+                }
+            }
+            catch (Exception ex) when (ex is BinanceException or HttpRequestException or TaskCanceledException)
+            {
+                // 标记价不可用时用最新价K线计算位点
+            }
+        }
 
         // 多周期共振：取高一档周期的K线（缓存 60s），失败不阻塞主分析
         IReadOnlyList<Models.Candle>? htf = null;
@@ -83,7 +110,8 @@ public sealed class AnalysisService(
         }
 
         var result = AnalysisEngine.Compute(market, pair, interval, candles, htf, htfInterval,
-            chanOptions, chanWindow, subLevel, subLevelInterval, lowerLevel, lowerLevelInterval);
+            chanOptions, chanWindow, subLevel, subLevelInterval, lowerLevel, lowerLevelInterval,
+            levelCandles, _levelOptions, levelsBasis);
         RecordSignals(market, pair, interval, result);
         return result with { Evidence = GetEvidenceCached(market, interval) };
     }

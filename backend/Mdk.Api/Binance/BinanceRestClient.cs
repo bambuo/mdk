@@ -70,6 +70,23 @@ public sealed class BinanceRestClient(
     }
 
     /// <summary>
+    /// 标记价K线（**仅合约**，现货无此端点）：标记价由多所现货价与基差合成，
+    /// 强平造成的插针不会进入该序列——用于计算支撑/阻力位点，避免最新价K线上的假极值。
+    /// 响应结构与 klines 相同。
+    /// </summary>
+    public async Task<Candle[]> GetMarkPriceKlinesAsync(TradingPair pair, string interval, int limit,
+        CancellationToken ct = default)
+    {
+        if (pair.IsEmpty)
+            throw new ArgumentException($"交易对为空（{pair.Symbol}）：应先经交易对解析并校验 IsEmpty", nameof(pair));
+        var url = $"{MarketKind.Futures.ToRestPath()}/markPriceKlines?symbol={pair.Symbol}&interval={interval}&limit={limit}";
+        using var response = await SendAsync(MarketKind.Futures, url, ct);
+        var rows = await response.Content.ReadFromJsonAsync<JsonElement[][]>(cancellationToken: ct)
+                   ?? throw new BinanceException(-1, "markPriceKlines 返回为空");
+        return ParseKlines(rows);
+    }
+
+    /// <summary>
     /// 按时间区间拉取K线（自动分页）：用于历史回填与"读取指定时间点的K线"。
     /// 从 fromSec 起（含）向 toSec 方向逐页拉取，每页上限 1000（合约 1500），页间短暂停顿以避免打满权重。
     /// </summary>

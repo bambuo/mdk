@@ -430,8 +430,12 @@ public static class ChanTests
             var options = new ChanOptions { WarmupBars = 30, AnalysisBars = levels.Count };
 
             // 显示窗口 60 / 100 根（都短于内部窗口），内部窗口固定为全部行情
-            var (displayA, chanA) = ChanWindowSelector.Select(all, 60, options.AnalysisBars);
-            var (displayB, chanB) = ChanWindowSelector.Select(all, 100, options.AnalysisBars);
+            var selectA = AnalysisWindows.Select(all, 60, options.AnalysisBars, options.AnalysisBars);
+            var selectB = AnalysisWindows.Select(all, 100, options.AnalysisBars, options.AnalysisBars);
+            var displayA = selectA.Display;
+            var chanA = selectA.Chan;
+            var displayB = selectB.Display;
+            var chanB = selectB.Chan;
             Assert.Equal(levels.Count, chanA.Count);
             Assert.Equal(chanA.Count, chanB.Count);
             Assert.True(displayA.Count < chanA.Count, "显示窗口应短于内部固定窗口");

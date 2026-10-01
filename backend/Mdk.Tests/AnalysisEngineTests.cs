@@ -73,9 +73,8 @@ public static class AnalysisEngineTests
                 };
                 candles[i] = new Candle(1000 + i * 60L, mid, mid + 0.5m, mid - 0.5m, mid, 10);
             }
-            decimal?[] atr = Enumerable.Repeat((decimal?)5.0m, count).ToArray();
-
-            var levels = SupportResistance.FindLevels(candles, atr);
+            // 锚点关掉：本用例只验摆动极值的聚类与分侧（客观锚点另有用例）
+            var levels = PriceLevels.Analyze(candles, new PriceLevelOptions { Anchors = false });
             var lastClose = candles[^1].Close; // 96
 
             var resistance = levels.Where(l => l.Kind == "resistance").ToList();
@@ -83,7 +82,8 @@ public static class AnalysisEngineTests
 
             var top = Assert.Single(resistance);
             Assert.Equal(110.5m, top.Price, 1);
-            Assert.Equal(4, top.Strength); // 峰出现 4 次（i=3,15,27,39）
+            Assert.Equal(4, top.Touches); // 峰出现 4 次（i=3,15,27,39）
+            Assert.True(top.Retested, "峰被触碰 4 次：应为已反复测试的位点");
 
             Assert.Contains(support, s => Math.Abs(s.Price - 89.5m) < 1);
             Assert.All(support, s => s.Price < lastClose);

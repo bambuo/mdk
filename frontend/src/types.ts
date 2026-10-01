@@ -59,8 +59,21 @@ export interface TrendResult {
 export interface PriceLevel {
   kind: 'support' | 'resistance'
   price: number
-  strength: number
   distancePct: number
+  /** 强度分：Σ(每次触碰的反向反应幅度)×时间衰减；纯客观锚点位点为 0（尚未被触碰） */
+  score: number
+  /** 触碰次数（簇内摆动极值个数）；0 = 来自客观锚点、尚未被触碰 */
+  touches: number
+  /** 平均反向反应幅度（ATR 倍数） */
+  reactionAtr: number | null
+  /** 最近一次触碰距窗口末端的K线根数 */
+  ageBars: number | null
+  /** 是否被反复测试（触碰 ≥ 2 次） */
+  retested: boolean
+  /** 来源标签：摆动点 / 前日高 / 前日低 / 前周高 / 前周低 / 整数关口 / 日VWAP */
+  sources: string[]
+  /** 展示口径：强度分是否达到实线阈值 */
+  solid: boolean
 }
 
 export interface TradeSignal {
@@ -240,6 +253,8 @@ export interface AnalysisResult {
   chanLevels: ChanLevelStructure[] | null
   /** 可信度表（按 来源 × 类别 分组）：界面据此给每个信号显示经验表现徽章 */
   evidence?: EvidenceBucket[] | null
+  /** 位点的价格基础：last=最新成交价；mark=标记价（仅合约，防插针） */
+  levelsBasis?: 'last' | 'mark'
 }
 
 /** 图表指标显示开关 */

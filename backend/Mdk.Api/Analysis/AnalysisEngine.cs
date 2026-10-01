@@ -22,7 +22,10 @@ public static class AnalysisEngine
         IReadOnlyList<Candle>? subLevelCandles = null,
         string? subLevelInterval = null,
         IReadOnlyList<Candle>? lowerLevelCandles = null,
-        string? lowerLevelInterval = null)
+        string? lowerLevelInterval = null,
+        IReadOnlyList<Candle>? levelCandles = null,
+        PriceLevelOptions? levelOptions = null,
+        string levelsBasis = "last")
     {
         var closes = candles.Select(c => c.Close).ToArray();
         var highs = candles.Select(c => c.High).ToArray();
@@ -38,7 +41,9 @@ public static class AnalysisEngine
         var boll = BollingerBands.Compute(closes, 20, 2.0m);
 
         var trend = TrendAnalyzer.Analyze(candles, ema50, ema200, dmi);
-        var levels = SupportResistance.FindLevels(candles, atr);
+        // 位点在**固定内部窗口**上计算（与显示窗口解耦）：否则同一行情会随显示窗口给出不同位点。
+        // 合约默认用标记价K线（防插针），窗口与价格基础均由 AnalysisService 决定。
+        var levels = PriceLevels.Analyze(levelCandles ?? candles, levelOptions ?? new PriceLevelOptions());
 
         // 信号发生时的市场状态（ADX 强度 / 波动率 / 带宽），用于事后状态依赖统计
         SignalRegime RegimeAt(int i)
@@ -246,7 +251,8 @@ public static class AnalysisEngine
                         : BuildHigherContext(htfCandles!, htfChan, htfInterval),
                     annotatedPrimaryPivots,
                     BuildStructurePosition(candles, chanResult, atr, chanLevels)),
-            chanLevels);
+            chanLevels,
+            LevelsBasis: levelsBasis);
     }
 
     /// <summary>高周期结构上下文：当前笔方向、价格相对最新中枢、最近买卖点。</summary>
@@ -510,91 +516,4 @@ public static class TrendAnalyzer
     }
 }
 
-/// <summary>
-/// 关键价格点位（概念二：支撑位与阻力位）。
-/// 摆动高低点（±lookback 根K线的分形极值）按 0.5m×ATR 容差聚类，
-/// 触碰次数即强度；按现价上下分为阻力/支撑，各取最近的 maxPerSide 个。
-/// </summary>
-public static class SupportResistance
-{
-    /// <summary>摆动点检测（±lookback 根K线的分形极值），供位点聚类与结构信号共用。</summary>
-    public static IReadOnlyList<SwingPoint> FindSwings(IReadOnlyList<Candle> candles, int lookback = 3)
-    {
-        var swings = new List<SwingPoint>();
-        for (var i = lookback; i < candles.Count - lookback; i++)
-        {
-            var isHigh = true;
-            var isLow = true;
-            for (var k = 1; k <= lookback; k++)
-            {
-                if (candles[i].High <= candles[i - k].High || candles[i].High <= candles[i + k].High) isHigh = false;
-                if (candles[i].Low >= candles[i - k].Low || candles[i].Low >= candles[i + k].Low) isLow = false;
-                if (!isHigh && !isLow) break;
-            }
-
-            if (isHigh) swings.Add(new SwingPoint(i, candles[i].High, true));
-            if (isLow) swings.Add(new SwingPoint(i, candles[i].Low, false));
-        }
-
-        return swings;
-    }
-
-    public static IReadOnlyList<PriceLevel> FindLevels(
-        IReadOnlyList<Candle> candles,
-        decimal?[] atr,
-        int lookback = 3,
-        int maxPerSide = 5)
-    {
-        var last = candles[^1];
-        var tolerance = 0.5m * (LastValid(atr) ?? last.Close * 0.01m);
-
-        var swings = FindSwings(candles, lookback).Select(s => s.Price).ToList();
-
-        // 按时间序聚类：价差在容差内的摆动点视为同一位点，均值作价位，次数作强度
-        var clustered = new List<(decimal Sum, int Count)>();
-        foreach (var price in swings)
-        {
-            var merged = false;
-            for (var i = 0; i < clustered.Count; i++)
-            {
-                var avg = clustered[i].Sum / clustered[i].Count;
-                if (Math.Abs(price - avg) > tolerance) continue;
-                clustered[i] = (clustered[i].Sum + price, clustered[i].Count + 1);
-                merged = true;
-                break;
-            }
-
-            if (!merged) clustered.Add((price, 1));
-        }
-
-        var levels = clustered
-            .Select(c => (Price: c.Sum / c.Count, Strength: c.Count))
-            .ToList();
-
-        var supports = levels
-            .Where(l => l.Price < last.Close)
-            .OrderByDescending(l => l.Price)
-            .Take(maxPerSide)
-            .Select(l => new PriceLevel("support", l.Price, l.Strength, Pct(l.Price, last.Close)))
-            .ToList();
-
-        var resistances = levels
-            .Where(l => l.Price >= last.Close)
-            .OrderBy(l => l.Price)
-            .Take(maxPerSide)
-            .Select(l => new PriceLevel("resistance", l.Price, l.Strength, Pct(l.Price, last.Close)))
-            .ToList();
-
-        return [.. resistances, .. supports];
-    }
-
-    private static decimal Pct(decimal level, decimal price) => Math.Round((level - price) / price * 100, 2);
-
-    private static decimal? LastValid(decimal?[] values)
-    {
-        for (var i = values.Length - 1; i >= 0; i--)
-            if (values[i] is not null)
-                return values[i];
-        return null;
-    }
-}
+// 位点（支撑/阻力）的计算已移入 PriceLevels.cs（口径 v2：固定内部窗口 + 加权强度 + 客观锚点）。

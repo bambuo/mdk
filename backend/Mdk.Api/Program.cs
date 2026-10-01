@@ -19,6 +19,7 @@ LocalSettings.Add(builder.Configuration, builder.Environment.ContentRootPath);
 builder.Services.Configure<BinanceOptions>(builder.Configuration.GetSection(BinanceOptions.SectionName));
 builder.Services.Configure<SignalOptions>(builder.Configuration.GetSection(SignalOptions.SectionName));
 builder.Services.Configure<ChanOptions>(builder.Configuration.GetSection(ChanOptions.SectionName));
+builder.Services.Configure<PriceLevelOptions>(builder.Configuration.GetSection(PriceLevelOptions.SectionName));
 builder.Services.Configure<BackfillOptions>(builder.Configuration.GetSection(BackfillOptions.SectionName));
 builder.Services.Configure<FeishuOptions>(builder.Configuration.GetSection(FeishuOptions.SectionName));
 // exchangeInfo（现货约 17MB）必须启用压缩传输并放宽超时，否则会下载超时

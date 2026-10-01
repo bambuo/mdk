@@ -269,7 +269,7 @@ function applyOverlayLines() {
   deaSeries?.setData(toLineData(a.macd.dea))
 }
 
-/** 支撑/阻力水平线（绿=支撑、红=阻力；触碰次数多的画实线） */
+/** 支撑/阻力水平线（绿=支撑、红=阻力；强度分达阈值画实线，来源标签直接写在线上） */
 function applyLevels() {
   if (!candleSeries) return
   for (const line of priceLines) candleSeries.removePriceLine(line)
@@ -281,14 +281,16 @@ function applyLevels() {
   for (const level of a.levels) {
     const isResistance = level.kind === 'resistance'
     const name = isResistance ? `R${++r}` : `S${++s}`
+    const tags = level.sources.filter(x => x !== '摆动点')
+    const suffix = tags.length ? ` ${tags.join('/')}` : level.touches > 0 ? ` ×${level.touches}` : ''
     priceLines.push(
       candleSeries.createPriceLine({
         price: level.price,
         color: isResistance ? 'rgba(239,83,80,0.75)' : 'rgba(38,166,154,0.75)',
         lineWidth: 1,
-        lineStyle: level.strength >= 3 ? LineStyle.Solid : LineStyle.Dashed,
+        lineStyle: level.solid ? LineStyle.Solid : LineStyle.Dashed,
         axisLabelVisible: true,
-        title: `${name}×${level.strength}`,
+        title: `${name}${suffix}`,
       }),
     )
   }

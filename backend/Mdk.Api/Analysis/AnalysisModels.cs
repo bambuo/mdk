@@ -6,8 +6,29 @@ namespace Mdk.Api.Analysis;
 /// <summary>趋势方向判定结果。Direction：LONG=做多，SHORT=做空，RANGE=观望。</summary>
 public sealed record TrendResult(string Direction, int Score, IReadOnlyList<string> Reasons);
 
-/// <summary>关键价格点位。Kind：support=支撑（现价下方），resistance=阻力（现价上方）。</summary>
-public sealed record PriceLevel(string Kind, decimal Price, int Strength, decimal DistancePct);
+/// <summary>
+/// 关键价格位点。Kind：support=支撑（现价下方），resistance=阻力（现价上方）。
+/// 强度口径见 <see cref="PriceLevels"/>：Score=Σ(触碰后的反应幅度，ATR 倍数)×时间衰减；
+/// Touches=触碰次数；Sources=来源标签（摆动点/前日高/整数关口/日VWAP 等）。
+/// </summary>
+public sealed record PriceLevel(
+    string Kind,
+    decimal Price,
+    decimal DistancePct,
+    /// <summary>强度分（加权，见 <see cref="PriceLevels"/>）；纯客观锚点位点为 0（尚未被触碰）。</summary>
+    decimal Score,
+    /// <summary>触碰次数（簇内摆动极值个数）；0 表示该位点来自客观锚点、尚未被触碰。</summary>
+    int Touches,
+    /// <summary>平均反向反应幅度（ATR 倍数）；未被触碰时为 null。</summary>
+    decimal? ReactionAtr,
+    /// <summary>最近一次触碰距窗口末端的根数；未被触碰时为 null。</summary>
+    int? AgeBars,
+    /// <summary>是否被反复测试（触碰 ≥ 2 次）——已知战场；false 含"只见过一次"与"纯锚点"。</summary>
+    bool Retested,
+    /// <summary>来源标签（可多个）：摆动点 / 前日高 / 前日低 / 前周高 / 前周低 / 整数关口 / 日VWAP。</summary>
+    IReadOnlyList<string> Sources,
+    /// <summary>展示口径：强度分是否达到实线阈值（未达到画虚线）。</summary>
+    bool Solid);
 
 /// <summary>
 /// 买卖点信号。Side：buy=买点（做多），sell=卖点（做空）。
@@ -138,7 +159,9 @@ public sealed record AnalysisResult(
     /// 可信度表：按「来源 × 类别 × 周期」给出该语境在台账里的经验统计（样本量/胜率与区间/扣费后为正）。
     /// 前端按 (source, kind, interval) 查表给每个信号显示徽章；样本不足时只显示"样本不足"。
     /// </summary>
-    IReadOnlyList<EvidenceBucket>? Evidence = null);
+    IReadOnlyList<EvidenceBucket>? Evidence = null,
+    /// <summary>位点的价格基础：last=最新成交价K线；mark=标记价K线（仅合约，用于避免插针造成的假位点）。</summary>
+    string LevelsBasis = "last");
 
 public sealed record KlinesResponse(
     string Market,
